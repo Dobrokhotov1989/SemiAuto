@@ -1,0 +1,174 @@
+---
+title: "Reading_time"
+author: "Oleg Dobrokhotov"
+date: "2021/5/21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressMessages(library(tidyverse))
+```
+
+## How long it takes to read all the abstracts?
+
+Common way to search scientific information is to make a query at some search engine (eg. PubMed) and then read abstract to find publications that is relevant among numerous hits.
+
+If the search query is too broad it would return too many hints, while if it too narrow it might be either too little hints (i.e. some important publications would be missing) or many irrelevant hints (i.e. a lot of time would be needed to sort them out).
+
+### How fast can we read?
+
+In accordance to the article in [Forbes](https://www.forbes.com/sites/brettnelson/2012/06/04/do-you-read-fast-enough-to-be-successful/?sh=649bf52462e7) average adult reads 300 words per minute (wpm), while for college student it is 450 wpm and 675 for college professor. Same article says that World speed reading champion can read 4700 wpm. There is no clear indication, but I assume these numbers are for the native English speakers.
+
+For the non-native English speakers, I would expect these numbers to be lower. In the paper by [Timothy Gutierrez "Implementing Silent Repeated-Reading: How Much Can Non-Native Readers of English Be Expected to Develop their Reading Fluency"](https://www.chs.nihon-u.ac.jp/institute/human/kiyou/94/9.pdf) (日本大学文理学部人文科学研究所「研究紀要」第94号 94 103 - 125 Sep 30, 2017) university students have a reading speed in the range from ~100 wpm to ~300 wpm.
+
+From these numbers, I will use:
+1. 500 wpm for native speakers (as researchers are usually students or higher);
+2. 200 wpm for non-native speakers (as researchers usually have to read a lot of papers in English, and their reading proficiency might be expected to be high);
+3. 4700 wpm for World speed reading champion
+
+### How long avarage abstract is?
+
+To answer this question I find papers from various journals with search query "crispr".
+
+```{r search_abstract}
+# Find CRISPR papers 
+crispr_papers <- europepmc::epmc_search(query = "crispr",
+                       verbose = FALSE, #previously this was error-prone
+                       limit = 1000,
+                       sort = 'date')
+
+head(crispr_papers)
+
+# Number of unique journals among them
+crispr_papers %>%
+  select(journalTitle) %>%
+  unique() %>%
+  count()
+
+# Extract one paper per journal (source = "MED")
+one_per_journal <- distinct(.data = crispr_papers,
+                            journalTitle,
+                            .keep_all = TRUE) %>%
+  filter(source == "MED")
+
+nrow(one_per_journal)
+
+head(one_per_journal)
+
+# Get abstracts
+paper_details <- purrr::map(.x = one_per_journal$id,
+           .f = ~ europepmc::epmc_details(ext_id = .x))
+
+# Extract abstract from basic from each list in paper_details
+abstract <- paper_details %>%
+  map(list("basic", "abstractText")) %>%
+  discard(.p = ~ is_null(.x)) %>% #discard all "NULL" elements from the list
+  as_vector()
+
+# Make tibble
+
+abstract_tb <- tibble(seq_id = seq_along(abstract),
+                      abstract = abstract)
+
+head(abstract_tb)
+
+words_per_abstract <- abstract_tb %>%
+  tidytext::unnest_tokens(output = word, input = abstract) %>%
+  group_by(seq_id) %>%
+  summarise(n_of_words = n())
+
+ggplot(words_per_abstract,
+       aes(x = n_of_words))+
+  geom_histogram()
+
+words_per_abstract %>%
+  ungroup() %>%
+  summarise(median_words = median(n_of_words),
+            mean_words = mean(n_of_words))
+
+```
+
+From this results on average there is *~ 210 words* in abstract. 
+
+### How long would it take to read all abstracts?
+
+To answer this question I find number of papers with search query "crispr" and calculate amount of time needed to read them all.
+
+```{r read_them_all}
+
+n_of_hits <- europepmc::epmc_hits(query = "crispr",
+                                  verbose = FALSE)
+
+abstract_length <- 210
+reading_speed <- 200
+reading_per_day <- 8 # how many hours a day you will read
+
+total_reading_time <- n_of_hits * abstract_length / 
+  reading_speed / 60 / reading_per_day / 30
+
+total_reading_time
+```
+
+If one non-native speaker will read all the abstracts about "crispr" and will read `r reading_per_day` hours a day, it will take him/her `r round(total_reading_time digits = 1)` months.
+
+Apart from the reading itself, it is also important to include the time to download abstract which reader needs. My measurements is 15 sec per abstract should be added.
+
+```{r with_download_time}
+total_reading_time_download <- 
+  (n_of_hits*abstract_length/reading_speed + n_of_hits*0.25)/60/reading_per_day / 30
+
+total_reading_time_download
+```
+Thus downloading time adds `r round((total_reading_time_download - total_reading_time)*30)` extra days to the reading time. 
+
+
+### How to show it
+
+```{r nice_plot}
+# Find plot dimentions
+a <- total_reading_time %>%
+  sqrt() %>%
+  ceiling() 
+b <-  ceiling(total_reading_time) / a
+
+# Make a df with coordinates
+nice_tb <- tibble(x = rep(1:b, times = a),
+       y = rep(1:a, times = b),
+       lbl =  emojifont::fontawesome('fa-clock'))
+
+ggplot(nice_tb, aes(x = x,
+                    y = y,
+                    label = lbl))+
+  geom_text(family='fontawesome-webfont', size = 7)+ 
+  theme_classic()+
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        plot.background = element_rect(fill = "transparent"),
+        panel.background = element_rect(fill = "transparent"))
+
+
+
+```
+
+I did not find a good way to show desired infografic with ggplot, however directly in Shiny it is possible to paste repeated icons in the designated column. The code is following:
+
+```{r shiny_solution}
+n_of_rep <- 10
+
+# Use logic from fontawesome::fa() to make a multiple icons in a row
+svg <- paste(rep(fontawesome::fa(name = "car"),
+                 times = n_of_rep),
+             collapse = "")
+svg <- HTML(svg)
+svg <- structure(svg, class = c("fontawesome", "svg", class(svg)))
+
+```
+
+Units of time to show the length of the reading can be as following:
+
+1. Game of Thrones series - full length ~70 h (https://www.quora.com/How-long-will-the-Games-of-Thrones-series-last);
+2. Anna Karenina book - 349736 words (https://blog.fostergrant.co.uk/2017/08/03/word-counts-popular-books-world/#:~:text=Harry%20Potter%20and%20the%20Order,Harry%20Potter%20series%20%E2%80%93%201%2C084%2C170%20words)
+3. Flight London-NY - ~7 h (skyscanner.com)

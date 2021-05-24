@@ -1,0 +1,118 @@
+---
+title: "Motivation"
+author: "Oleg Dobrokhotov"
+date: "2021/5/20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressMessages(library(tidyverse))
+```
+
+## Playground for Motivation box
+#### Which is part of the Home tab
+
+The idea of that box is to show the quick (logarithmic?) growth of the scientific publication number as a rationale for semi-automatic text analysis
+
+### Get a number of pubs per year
+
+#### Query
+The proper query to get all publication is "*" not " " or ""
+```{r query}
+
+star <- europepmc::epmc_hits_trend(query = "*",
+                                   period = 2021:2021) %>%
+  mutate(query = 'Star "*"',
+         .before = 1)
+
+space <- europepmc::epmc_hits_trend(query = " ",
+                                    period = 2021:2021) %>%
+  mutate(query = 'Space " "',
+         .before = 1)
+
+blank <- europepmc::epmc_hits_trend(query = "",
+                                    period = 2021:2021) %>%
+  mutate(query = 'Blank ""',
+         .before = 1)
+
+bind_rows(star, space, blank) %>%
+  mutate(is_query_hits_all = all_hits == query_hits)
+
+
+```
+
+#### Period
+From the direct search at [http://europepmc.org/](http://europepmc.org/search?query=%2a&page=1&sortBy=FIRST_PDATE_D%2Basc), the latest "first publish date" is 01 Jan 1781 (as for May 20th, 2021).
+
+The time to execute the request to EPMC heavily depends on the period of search. For single year, it takes just a fractions of a second, but if request the all period, it becomes unreasonably long. Hence, it would be non-viable to make a request to EPMC on every app load and data for plot should be kept locally.
+```{r period}
+microbenchmark::microbenchmark(
+  This_year = europepmc::epmc_hits_trend(query = "*",
+                                         period = 2021:2021),
+  From_1900 = europepmc::epmc_hits_trend(query = "*",
+                                         period = 1900:2021),
+  times = 1,
+  unit = "s"
+)
+```
+
+#### Request all hints
+Create tibble with the all hints trend from 1781 to current year
+```{r all_hints_trend}
+start_date <- 1781
+
+end_date <- as.numeric(str_sub(string = Sys.Date(), start = 1, end = 4))
+
+pubs_trend_all_years <- europepmc::epmc_hits_trend(query = "*",
+                                                   period = start_date:end_date)
+
+head(pubs_trend_all_years)
+```
+
+#### Make a plot
+Before mid-1940s the number of pubs is very low, hence it rather meaningless to use all the date range from 1700s. For illustration purpose, last 100 years will be more than enough.  
+
+```{r plot}
+pubs_trend_all_years %>%
+  ggplot(aes(x = year,
+             y = query_hits))+
+  geom_col() +
+  labs(title = "Bad illustration")
+
+pubs_trend_all_years %>%
+  filter(year >= (end_date - 100)) %>%
+  ggplot(aes(x = year,
+             y = query_hits))+
+  geom_col() +
+  labs(title = "Good illustration")
+
+```
+
+```{r plot aesthetics}
+pubs_trend_all_years %>%
+  filter(between(year, (end_date - 100), (end_date - 1))) %>%
+  ggplot(aes(x = year,
+             y = query_hits))+
+  geom_point(fill = "grey15") +
+  geom_line(stat = "smooth",
+            formula = y ~ poly(x),
+            span = 0.5,
+            arrow = arrow(angle = 10,
+                          length = unit(0.7, "cm"),
+                          type = "closed"),
+            size = 1,
+            color = "red") +
+  labs(title = "Number of publications over last 100 years")+
+  scale_x_continuous(limits = c(end_date - 101,
+                                end_date),
+                     breaks = seq(from = end_date - 101,
+                                  to = end_date-1,
+                                  by = 20))+ 
+  theme_void()+
+  theme(axis.text.x = element_text())
+
+
+```
+
+However, interactive change of the years might be implemented.
