@@ -1,0 +1,666 @@
+---
+title: "Abbrevimate"
+author: "Oleg Dobrokhotov"
+date: "2021/6/3"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressMessages(library(tidyverse))
+```
+
+# Development of abbrevimate server-side logic
+
+
+## Source: EuropePMC
+
+First of all we need to get a list of publications of interest
+
+```{r search_results}
+
+search_results <- europepmc::epmc_search(
+  query = "blebbistatin", #random query
+  limit = 10, #reasonable number for testing purpose
+  verbose = FALSE #verbose is error-prone
+)
+
+colnames(search_results)
+
+```
+
+Among the columns in the returned tibble, we need only PMID or PMCID, isOpenAccess and firstPublicationDate. Other columns doesn't seems necessary.
+
+```{r search_results_clean}
+
+search_results <- search_results %>%
+  select(pmid, pmcid, isOpenAccess, firstPublicationDate)
+
+search_results
+```
+
+Among the found papers we can use only these with open access. Close results might be returned to user, so (s)he can download these papers manually and use for search as local files. 
+
+```{r open_results}
+
+open_results <- search_results %>%
+  filter(isOpenAccess == "Y")
+
+close_results <- search_results %>%
+  filter(isOpenAccess == "N")
+
+```
+
+
+### Query
+#### Search with publication date restriction
+
+What would be faster: download all search results and then filter by publication date or incorporate date restrictions into the query and use EuropePMC search engine.
+
+Test query: "(JOURNAL:"Proceedings of the National Academy of Sciences of the United States of America") AND (METHODS:"blebbistatin")"
+
+Test date range: 01 Jan 2019 ~ 31 May 2021
+
+```{r date_restriction}
+
+europe_pmc_engine <- function(query, date_range){
+  query_full <- sprintf("%s AND (FIRST_PDATE:[%s TO %s])", query, date_range[[1]], date_range[[2]])
+  search_results <- europepmc::epmc_search(
+    query = query_full, 
+    limit = 200, #as for the June 3rd, 2021 limit >> number of publication without date restriction 
+    verbose = FALSE) %>% #verbose is error-prone
+    select(pmid, pmcid, isOpenAccess, firstPublicationDate) %>%
+    mutate(firstPublicationDate = as.Date(firstPublicationDate)) %>%
+    arrange(desc(firstPublicationDate))
+  
+  return(search_results)
+  
+}
+
+local_filter <- function(query, date_range){
+  search_results <- europepmc::epmc_search(
+    query = query, 
+    limit = 200, #as for the June 3rd, 2021 limit >> number of publication without date restriction 
+    verbose = FALSE) %>% #verbose is error-prone
+    select(pmid, pmcid, isOpenAccess, firstPublicationDate) %>%
+    mutate(firstPublicationDate = as.Date(firstPublicationDate)) %>%
+    filter(between(firstPublicationDate,
+                   as.Date(date_range[[1]]),
+                   as.Date(date_range[[2]])))%>%
+    arrange(desc(firstPublicationDate))
+  
+  return(search_results)
+}
+
+microbenchmark::microbenchmark(
+  europe_pmc_engine = europe_pmc_engine(query = '(JOURNAL:"Proceedings of the National Academy of Sciences of the United States of America") AND (METHODS:"blebbistatin")', date_range = c("2019-01-01", "2021-05-31")),
+  local_filter = local_filter(query = '(JOURNAL:"Proceedings of the National Academy of Sciences of the United States of America") AND (METHODS:"blebbistatin")', date_range = c("2019-01-01", "2021-05-31")),
+  check = "equivalent",
+  times = 10
+)
+
+```
+Results from microbenchmark() show that *local filter is slower than EPMC engine* (probably because less date need to be downloaded via internet connection). Hence date-range should be incorporated into query.
+
+```{r function_epmc_search}
+
+abbr_epmc_search <- function(query, limit = 0, date_range = NULL, precise = FALSE){
+  
+  #Define full query
+  #If date range is not defined by user
+  if(is.null(date_range)){
+    
+    query_full <- query
+    
+    # If specific dates selected by user  
+  } else if (precise == TRUE){
+    
+    query_full <- sprintf("%s AND (FIRST_PDATE:[%s TO %s])",
+                          query, date_range[[1]], date_range[[2]])
+    
+    # If only year selected by user
+  } else if (precise == FALSE){
+    
+    start_d <- sprintf("%s-01-01", format(date_range[[1]], "%Y"))
+    end_d <- sprintf("%s-12-31", format(date_range[[2]], "%Y"))
+    query_full <- sprintf("%s AND (FIRST_PDATE:[%s TO %s])",
+                          query, start_d, end_d)
+    
+  }
+  
+  # limit == 0 means "unlimited" number of publications
+  # "unlimited' == maximum number of hits
+  if (limit == 0) {
+    limit <- europepmc::epmc_hits(query = query_full)
+  }
+  
+  search_results <- europepmc::epmc_search(
+    query = query_full,
+    limit = limit, 
+    verbose = FALSE #verbose is error-prone
+  ) %>%
+    select(pmid, pmcid, isOpenAccess, firstPublicationDate)
+  
+  return(search_results)
+}
+
+
+abbr_epmc_search(query = '(METHODS:"blebbistatin")',
+                 limit = 10,
+                 date_range = as.Date(c("2015-01-01", "2020-01-01")),
+                 precise = FALSE)
+
+```
+
+### Convert search term into pattern
+
+Abbreviations (except of widely used, like DNA) in scientific literature are
+defined at first appearance in form "full_term (abbr)". To search these
+abbreviations in the text, the search turm should be converted into the pattern
+that match this commonly used format.
+
+Here I use function tolower() to make a search case insensitive.
+Next, I replace spaces with ".?" to encounter possibility that space was omitted
+(eg. "Caliculin A" sometimes can be written as "CaliculinA").
+This follows the phrase in parenthesis which can be any length and be anything.
+Lastly, to include or exclude derivatives, I define either strict boundaries around the search term, or the flexible one
+
+```{r abbr_pattern}
+abbr_term_to_pattern <- function(term,
+                                 derivatives = FALSE){
+  
+  usable_term <- term %>%
+    tolower() %>%
+    stringr::str_replace_all(string = .,
+                             pattern = " ",
+                             replacement = ".?")
+  
+  if(derivatives == TRUE){
+    
+    search_pattern <- sprintf("(\\S*%s\\w*[ ][(].*?[)])", usable_term)
+    return(search_pattern)
+    
+  } else if (derivatives == FALSE) {
+    
+    search_pattern <- sprintf("(\\b%s\\b[ ][(].*?[)])", usable_term)
+    return(search_pattern)
+    
+  }
+}
+
+abbr_term_to_pattern(term = "Calyculin A",
+                     derivatives = FALSE)
+
+abbr_term_to_pattern(term = "Y-27632",
+                     derivatives = TRUE)
+
+```
+
+### Searching for the patterns in the full papers
+
+#### Convert xml to character vector
+When list of open access papers and pattern have been obtained, we can proceed 
+to the analysis of the full text papers.
+
+First, download paper and convert it into R list
+
+```{r download_full_text}
+
+
+full_xml <- europepmc::epmc_ftxt(ext_id = open_results$pmcid[[2]])
+
+full_list <- as_list(full_xml)
+
+names(full_list$article)
+
+```
+
+Article contains 3 main elements: front - journal metadata and article metadata;
+body - main sections of the article; back - acknowledgments, reference list, etc.;
+floats-group - info regarding figures, including legends.
+
+From the front element we only needs Abstract, as abbreviations might appear there.
+
+```{r extract_abstract}
+# Extract "abstract" element from the list. 
+# The element "p" actually contains the text of the abstract 
+abstract_list <- full_list$article$front$`article-meta`$abstract$p
+
+
+abstract_vector <- purrr::flatten_chr(abstract_list)
+
+# If there is references or special editing in the abstract (eg. superscript),
+# abstract will be split into several elements. Here I merge it back into single
+# character string
+abstract_string <- paste(abstract_vector, collapse = " ")
+
+abstract_list
+
+abstract_string
+```
+
+The whole body should be converted into the vector. Body has several levels of 
+sub-sections. In this case only highest level of subsections are splitted into 
+the paragraphs, while lower level subsections paragraphs fused together. Perhaps,
+it will be overly complicated to go down to the lowest subsection level, at least
+for the purpose of the present app - i.e. searching for specific pattern in the
+text.
+
+```{r extract_body}
+
+article_body <- 
+  # Take a "body" element
+  full_list$article$body %>%
+  # Remove upper level of list
+  purrr::flatten() 
+
+# Extract elements entitled "sec" and remove upper level 
+sec <- article_body[which(names(article_body) == "sec")] %>%
+  flatten() 
+
+# "Replace" elements "sec" with a flattened version
+article_body[which(names(article_body) == "sec")] <- NULL
+article_body <- append(article_body, test)
+
+article_body <- article_body %>%
+  # unlist each of the element of list and collapse it in single string
+  purrr::map(.f = ~paste(unlist(.x, use.names = FALSE), collapse = " ")) %>%
+  # convert to character vector
+  flatten_chr()
+
+article_body[1:2]
+```
+
+From the float-groups we can extract legends, as abbreviations might appear there.
+There could be several figure, so we need to extract all of them
+
+```{r extract_fig_legends}
+
+legends <- full_list$article$`floats-group`
+
+captions <- 
+  # extract "caption" elements
+  purrr::map(legends, 2) %>% 
+  #removes unnecessary upper level of list
+  purrr::flatten() %>% 
+  # unlist each of the element of list and collapse it in single string
+  purrr::map(.f = ~paste(unlist(.x, use.names = FALSE), collapse = " ")) %>%
+  # convert to character vector
+  flatten_chr()
+
+class(captions)
+captions[1:2]
+
+```
+
+
+The back element might contain glossary with abbreviations, but as abbreviation 
+will be anyway defined in the main text, we will drop the whole "back" (as no 
+useful info except glossary is there).
+
+
+As, there is similar pattern of the actions with all subsection, it is meaningful
+to merge them together and then convert to the character vector.
+```{r all_sections_together}
+#### Same as in the chunks above ####
+abstract_list <- full_list$article$front$`article-meta`$abstract$p
+
+article_body_list <- 
+  full_list$article$body %>%
+  purrr::flatten() 
+
+sec <- article_body_list[which(names(article_body_list) == "sec")] %>%
+  flatten() 
+
+article_body_list[which(names(article_body_list) == "sec")] <- NULL
+article_body_list <- append(article_body_list, test)
+
+legends_list <- full_list$article$`floats-group` %>%
+  purrr::map(2) %>% 
+  purrr::flatten() 
+
+#### Merge and flatten ####
+
+all_text <- append(abstract_list, c(article_body_list, legends_list)) %>% 
+  # unlist each of the element of list and collapse it in single string
+  purrr::map(.f = ~paste(unlist(.x, use.names = FALSE), collapse = " ")) %>%
+  # convert to character vector
+  flatten_chr()
+
+
+
+```
+
+#### Optimization of a search logic
+
+There are several options, that might be different in terms of the required time
+for searching the pattern:
+1. Convert whole xml into a character string keeping all "useless" information 
+(eg. reference list). It might be beneficial, if time required for removing 
+useless parts, would be higher then the time required for screening extra text.
+2. Convert xml into character string and remove all the "junk" on the way. It
+might be beneficial in the case opposite to case 1.
+3. There also might be different between searching pattern in a character vector
+and in single (but long) character string. 
+
+For test purpose I will search for the word "blebbistatin" in the text.
+
+
+* It turns, that str_extract_all() can be applied directly to the xml, hence
+I will test that.
+* Whole list can't be directly flattened to the character vector:
+as_list(full_xml) %>% flatten_chr() returns error 
+`r as_list(full_xml) %>% flatten_chr()`
+*
+ 
+```{r functions_for_searching}
+# Directly on the xml
+xml_extr <- function(full_xml, pattern){
+  str_extract_all(string = full_xml,
+                  pattern = pattern) %>%
+    flatten_chr()
+  }
+
+# Directly on the full list
+list_extr <- function(full_xml, pattern){
+  str_extract_all(string = as_list(full_xml),
+                  pattern = pattern) %>%
+  flatten_chr()
+}
+
+# Clean list 
+clean_vector <- function(full_xml, pattern){
+  full_list <- as_list(full_xml)
+  
+  abstract_list <- full_list$article$front$`article-meta`$abstract$p
+  
+  article_body_list <- 
+    full_list$article$body %>%
+    purrr::flatten() 
+  
+  sec <- article_body_list[which(names(article_body_list) == "sec")] %>%
+    flatten() 
+  
+  article_body_list[which(names(article_body_list) == "sec")] <- NULL
+  article_body_list <- append(article_body_list, test)
+  
+  legends_list <- full_list$article$`floats-group` %>%
+    purrr::map(2) %>% 
+    purrr::flatten() 
+  
+  all_text <- append(abstract_list, c(article_body_list, legends_list)) %>% 
+    purrr::map(.f = ~paste(unlist(.x, use.names = FALSE), collapse = " ")) %>%
+    flatten_chr()
+  
+  str_extract_all(string = all_text,
+                  pattern = pattern) %>%
+    flatten_chr()
+  
+}
+
+# Clean single character string 
+clean_string <- function(full_xml, pattern){
+  full_list <- as_list(full_xml)
+  
+  abstract_list <- full_list$article$front$`article-meta`$abstract$p
+  
+  article_body_list <- 
+    full_list$article$body %>%
+    purrr::flatten() 
+  
+  sec <- article_body_list[which(names(article_body_list) == "sec")] %>%
+    flatten() 
+  
+  article_body_list[which(names(article_body_list) == "sec")] <- NULL
+  article_body_list <- append(article_body_list, test)
+  
+  legends_list <- full_list$article$`floats-group` %>%
+    purrr::map(2) %>% 
+    purrr::flatten() 
+  
+  all_text <- append(abstract_list, c(article_body_list, legends_list)) %>% 
+    purrr::map(.f = ~paste(unlist(.x, use.names = FALSE), collapse = " ")) %>%
+    flatten_chr() %>%
+    paste(collapse = " ")
+  
+  str_extract_all(string = all_text,
+                  pattern = pattern)
+  
+}
+
+```
+
+The four functions is tested for the performance using microbenchmark
+```{r fastest_search}
+microbenchmark::microbenchmark(
+  xml = xml_extr(full_xml, pattern = "blebbistatin"),
+  list_f = list_extr(full_xml, pattern = "blebbistatin"),
+  vector = clean_vector(full_xml, pattern = "blebbistatin"),
+  string = clean_string(full_xml, pattern = "blebbistatin"),
+ check = "equivalent" 
+)
+```
+After manual checking it turns that during the cleaning, one of the "blebbistatin"
+was removed. Therefore, I run microbenchmark without checking results, and I will 
+give a preference to running search over the whole list or xml, unless there are
+extremely slower.
+
+```{r fastest_search_2}
+microbenchmark::microbenchmark(
+  xml = xml_extr(full_xml, pattern = "blebbistatin"),
+  list_f = list_extr(full_xml, pattern = "blebbistatin"),
+  vector = clean_vector(full_xml, pattern = "blebbistatin"),
+  string = clean_string(full_xml, pattern = "blebbistatin")
+)
+```
+
+Microbenchmark results shows that running the search directly over the xml file
+is much faster. Considering that all other options are roughly the same, the 
+conversion of xml to list is most time-consuming operation.
+
+Just to confirm that it will work the same on the real pattern I run it one more
+time.
+
+```{r fastest_search_3}
+my_pattern <- abbr_term_to_pattern(term = "blebbistatin",
+                                   derivatives = TRUE)
+
+microbenchmark::microbenchmark(
+  xml = xml_extr(full_xml, pattern = my_pattern),
+  list_f = list_extr(full_xml, pattern = my_pattern),
+  vector = clean_vector(full_xml, pattern = my_pattern),
+  string = clean_string(full_xml, pattern = my_pattern)
+)
+```
+
+When pattern became more complicated then a single word, xml become much slower 
+then list. "Dirty" list is slightly slower then clean vector or string. String 
+and vector almost identical.
+
+```{r fastest_search_4}
+my_pattern <- abbr_term_to_pattern(term = "blebbistatin",
+                                   derivatives = FALSE)
+
+microbenchmark::microbenchmark(
+  xml = xml_extr(full_xml, pattern = my_pattern),
+  list_f = list_extr(full_xml, pattern = my_pattern),
+  vector = clean_vector(full_xml, pattern = my_pattern),
+  string = clean_string(full_xml, pattern = my_pattern)
+)
+```
+
+When the pattern is without derivatives, xml again became fastest.
+
+Therefore, function for searching should have an argument "derivatives" to 
+apply search over xml (derivatives = FALSE) or list (derivatives = TRUE).
+
+As cleaning does not provide significant benefits in terms of time, it is better
+to avoid this extra code that can be error-prone.
+
+```{r search_function}
+
+abbr_extract_pattern <- function(x, pattern, derivatives = FALSE){
+  
+  # No derivatives - directly on xml
+  if(!isTRUE(derivatives)){
+    
+    results <- str_extract_all(string = x,
+                               pattern = pattern) %>%
+      flatten_chr()
+    
+    return(results)
+    
+  }
+  
+  # Derivatives - convert xml to list
+  if (isTRUE(derivatives)) {
+    
+    results <- str_extract_all(string = as_list(x),
+                               pattern = pattern) %>%
+      flatten_chr()
+    
+    return(results)
+  }
+}
+
+```
+
+
+```{r fastest_search_5}
+my_pattern <- abbr_term_to_pattern(term = "blebbistatin",
+                                   derivatives = FALSE)
+
+microbenchmark::microbenchmark(
+  xml = xml_extr(full_xml, pattern = my_pattern),
+  list_f = list_extr(full_xml, pattern = my_pattern),
+  vector = clean_vector(full_xml, pattern = my_pattern),
+  string = clean_string(full_xml, pattern = my_pattern),
+  my_funcion = abbr_extract_pattern(full_xml,
+                                    pattern = my_pattern,
+                                    derivatives = FALSE),
+  times = 20L
+)
+
+
+my_pattern <- abbr_term_to_pattern(term = "blebbistatin",
+                                   derivatives = TRUE)
+
+microbenchmark::microbenchmark(
+  xml = xml_extr(full_xml, pattern = my_pattern),
+  list_f = list_extr(full_xml, pattern = my_pattern),
+  vector = clean_vector(full_xml, pattern = my_pattern),
+  string = clean_string(full_xml, pattern = my_pattern),
+  my_funcion = abbr_extract_pattern(full_xml,
+                                    pattern = my_pattern,
+                                    derivatives = TRUE),
+  times = 20L
+)
+
+```
+
+Created function is slghtly slower than each of the fastest option for both 
+cases (with or without derivatives) but difference is insignificant. At the same
+time, for when applied over the both cases, it will be much faster.
+
+
+### Is it abbreviation or false-match?
+
+Among the returned results, that matches the pattern of abbreviation, can be found
+"false-matches", for instance concentration of the compound or reference to a 
+figure). 
+
+```{r false_match}
+my_pattern <- abbr_term_to_pattern(term = "blebbistatin",
+                                   derivatives = TRUE)
+# 1,3,4 no abbreviations
+# 2 - "false match"
+# 5 - abbreviation and "false match"
+full_xml <- europepmc::epmc_ftxt(ext_id = open_results$pmcid[[5]])
+
+abbr_vec <- abbr_extract_pattern(x = full_xml,
+                     pattern = my_pattern,
+                     derivatives = TRUE)
+
+abbr_vec
+```
+
+In order to separate abbreviations from false matches, the following logic can be
+applied. In the most of the cases, abbreviation is a few first letters from the
+full term (like in case above Bleb - blebbistatin). However, it is not always the 
+case, for instance Calyculin A - CalyA or building - bldg. Nevertheless, the 
+characters in abbreviation are all used in the full term and the order is exactly
+the same as in the full term. Additionally, first character in abbreviation
+should match the first character in full term.
+
+Therefore it is possible to assess whether letters inside parenthesis looks like
+abbreviation.
+
+#### Split full term - abbreviation pair
+In order to do so, we first need to extract abbreviation and full term from the
+character string.
+
+```{r split_full_term_and_abbreviation}
+# Split full term and abbreviation and convert to tibble
+abbr_tbl <- abbr_vec %>%
+  purrr::map(~ str_split_fixed(string = (.x),
+                             pattern = " \\(", n = 2)) %>%
+  unlist() %>%
+  matrix(ncol = 2, byrow = TRUE) %>%
+  as_tibble() %>%
+  rename_with(.f = function(x){c("full", "abbr")})
+
+# Remove trailing ")" from abbr
+abbr_tbl$abbr <- purrr::map_chr(abbr_tbl$abbr,
+                            .f = function(x){stringr::str_sub(x, 1, -2)})
+
+abbr_tbl
+
+#Same as a function
+abbr_split_term_and_abbr <- function(x){
+  
+  abbr_tbl <- x %>%
+    purrr::map(~ str_split_fixed(string = (.x),
+                                 pattern = " \\(", n = 2)) %>%
+    unlist() %>%
+    matrix(ncol = 2, byrow = TRUE) %>%
+    tibble::as_tibble() %>%
+    dplyr::rename_with(.f = function(x){c("full", "abbr")})
+  
+  abbr_tbl$abbr <- purrr::map_chr(abbr_tbl$abbr,
+                            .f = function(x){stringr::str_sub(x, 1, -2)})
+  
+  return(abbr_tbl)
+}
+
+```
+
+To evaluate whether abbr is abbreviation, we can use regex
+```{r is_abbr}
+abbr_abbreviation_to_pattern <- function(x){
+  pattern <- x %>%
+    stringr::str_to_lower(locale = "en") %>%
+    stringr::str_split(., pattern = "", simplify = TRUE) %>%
+    stringr::str_c(., collapse = ".*") %>%
+    stringr::str_c("\\b", ., sep = "") %>%
+    # Two following modifications needed to avoid evaluating parenthesis
+    # in the context of regex where they have special meaning 
+    stringr::str_replace_all(.,
+                             pattern = "\\(",
+                             replacement = "\\\\(") %>%
+    stringr::str_replace_all(.,
+                             pattern = "\\)",
+                             replacement = "\\\\)") %>%
+    
+  return(pattern)
+}
+
+abbr_tbl$abbr_pattern <- map_chr(abbr_tbl$abbr, abbr_abbreviation_to_pattern)
+
+abbr_tbl$is_abbr <- map2_lgl(.x = abbr_tbl$full,
+                             .y = abbr_tbl$abbr_pattern,
+                             .f = ~ stringr::str_detect(string = .x,
+                                                        pattern = .y))
+
+
+
+```

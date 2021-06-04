@@ -14,9 +14,9 @@ mod_body_ui <- function(id){
     id = ns("body"),
     shinydashboard::tabItems(
       mod_home_tab_ui(ns("home_tab_ui_1")),
-      mod_text_sieve_tab_ui("text_sieve_tab_ui_1"),
-      mod_abbrevimate_tab_ui("abbrevimate_tab_ui_1"),
-      mod_about_tab_ui("about_tab_ui_1")
+      mod_text_sieve_tab_ui(ns("text_sieve_tab_ui_1")),
+      mod_abbrevimate_tab_ui(ns("abbrevimate_tab_ui_1")),
+      mod_about_tab_ui(ns("about_tab_ui_1"))
     )
   )
 

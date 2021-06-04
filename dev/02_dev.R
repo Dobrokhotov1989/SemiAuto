@@ -18,13 +18,16 @@
 usethis::use_package( "shinydashboard" )
 usethis::use_package( "shinydashboardPlus" )
 usethis::use_package( "shinyWidgets" )
+usethis::use_package( "shinyBS" )
 usethis::use_package( "waiter" )
 usethis::use_package( "europepmc" )
 usethis::use_package( "ggplot2" )
 usethis::use_package( "grid" )
 usethis::use_package( "dplyr" )
 usethis::use_package( "stringr" )
-
+usethis::use_package( "xml2" )
+usethis::use_package( "purrr" )
+usethis::use_package( "rlang" )
 
 ## Add modules ----
 ## Create a module infrastructure in R/
@@ -32,19 +35,32 @@ golem::add_module( name = "header" ) # Name of the module
 golem::add_module( name = "sidebar" ) # Name of the module
 golem::add_module( name = "footer" ) # Name of the module
 golem::add_module( name = "body" ) # Name of the module
+
 golem::add_module( name = "home_tab" ) # Name of the module
 golem::add_module( name = "text_sieve_tab" ) # Name of the module
 golem::add_module( name = "abbrevimate_tab" ) # Name of the module
 golem::add_module( name = "about_tab" ) # Name of the module
+
 golem::add_module( name = "home_motivation_box" ) # Name of the module
 golem::add_module( name = "home_reading_time_box" ) # Name of the module
 
+golem::add_module( name = "abbrevimate_settings_box" ) # Name of the module
+golem::add_module( name = "abbrevimate_pos_hits_box" ) # Name of the module
+golem::add_module( name = "abbrevimate_neg_hits_box" ) # Name of the module
+golem::add_module( name = "abbrevimate_library_box" ) # Name of the module
+
 ## Add helper functions ----
 ## Creates fct_* and utils_*
-golem::add_fct( "year_now" ) 
-golem::add_fct( "oldest_pub_year" ) 
+golem::add_fct( "abbr_epmc_search" ) 
+golem::add_fct( "abbr_term_to_pattern" ) 
+golem::add_fct( "abbr_extract_pattern_from_paper" ) 
+golem::add_fct( "abbr_abbreviation_to_pattern" ) 
+golem::add_fct( "abbr_split_term_and_abbr" ) 
+
 
 golem::add_utils( "helpers" )
+golem::add_utils( "abbrevimate" )
+
 
 ## External resources
 ## Creates .js and .css files at inst/app/www

@@ -44,7 +44,6 @@ mod_home_motivation_box_ui <- function(id){
       br(),
       "Plot shows number of documents (indexed in EuropePMC) published each year.
       Click on the gear-icon to adjust the years range."
-      
     ),
     column (
       width = 5,
@@ -93,10 +92,12 @@ mod_home_motivation_box_server <- function(id){
         ggplot2::theme(axis.text.x = ggplot2::element_text(),
                        plot.title = ggplot2::element_text(margin = ggplot2::margin(b = -15),
                                                           size = 14))
+
       
       return(pubs_plot)
       
-    }, bg="transparent", )
+    }, bg="transparent")
+    
     
   })
 }
