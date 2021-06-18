@@ -29,7 +29,8 @@ mod_abbrevimate_tab_server <- function(id){
     ns <- session$ns
     mod_abbrevimate_settings_box_server("abbrevimate_settings_box_ui_1")
     mod_abbrevimate_library_box_server("abbrevimate_library_box_ui_1")
-    mod_abbrevimate_pos_hits_box_server("abbrevimate_pos_hits_box_ui_1")
+    mod_abbrevimate_pos_hits_box_server("abbrevimate_pos_hits_box_ui_1",
+                                        pos_hits = abbr_return_values$true_abbr)
     mod_abbrevimate_neg_hits_box_server("abbrevimate_neg_hits_box_ui_1")
   })
 }

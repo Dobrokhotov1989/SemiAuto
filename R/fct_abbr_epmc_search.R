@@ -50,7 +50,7 @@ abbr_epmc_search <- function(query, limit = 0, date_range = NULL, precise = FALS
     limit = limit, 
     verbose = FALSE #verbose is error-prone
   ) %>%
-    dplyr::select(pmid, pmcid, isOpenAccess, firstPublicationDate)
+    dplyr::select(pmid, pmcid, isOpenAccess, firstPublicationDate, inEPMC, inPMC)
   
   return(search_results)
 }

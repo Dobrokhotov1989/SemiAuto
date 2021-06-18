@@ -10,7 +10,7 @@
 #' @noRd
 abbr_split_term_and_abbr <- function(x){
   abbr_tbl <- x %>%
-    purrr::map(~ str_split_fixed(string = (.x),
+    purrr::map(~ stringr::str_split_fixed(string = (.x),
                                  pattern = " \\(", n = 2)) %>%
     unlist() %>%
     matrix(ncol = 2, byrow = TRUE) %>%

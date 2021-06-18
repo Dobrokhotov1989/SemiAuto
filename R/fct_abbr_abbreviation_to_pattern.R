@@ -6,7 +6,7 @@
 #' @return Return pattern of abbreviation as a character string
 #'
 #' @noRd
-abbr_to_pattern <- function(x){
+abbr_abbreviation_to_pattern <- function(x){
   pattern <- x %>%
     stringr::str_to_lower(locale = "en") %>%
     stringr::str_split(., pattern = "", simplify = TRUE) %>%

@@ -32,7 +32,7 @@ mod_abbrevimate_pos_hits_box_ui <- function(id){
 #' abbrevimate_pos_hits_box Server Functions
 #'
 #' @noRd 
-mod_abbrevimate_pos_hits_box_server <- function(id){
+mod_abbrevimate_pos_hits_box_server <- function(id, pos_hits = ""){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
     
@@ -78,9 +78,13 @@ mod_abbrevimate_pos_hits_box_server <- function(id){
       )
     })
     
+
     output$pos_hits <- DT::renderDataTable({
-      tibble::tibble(a = 1:3,
-                     b = LETTERS[1:3])
+      if(not_null(pos_hits)){
+      tibble::tibble(a = pos_hits)
+      } else {
+        tibble::tibble(a = "Nothing to show")
+      }
     })
     
   })
