@@ -293,7 +293,7 @@ mod_abbrevimate_settings_box_server <- function(id){
                      
                      
                      pubs_list <- abbr_epmc_search(query = input$epmc_query,
-                                                   limit = rv$max,
+                                                   limit = 20,#rv$max,
                                                    date_range = rv$dates,
                                                    precise = rv$precise)
                      
@@ -305,7 +305,7 @@ mod_abbrevimate_settings_box_server <- function(id){
                        dplyr::filter(isOpenAccess == "Y" &
                                        not_na(pmcid)) 
                      
-                     open_pubs_list <- open_pubs_list[1:10,]
+                     open_pubs_list <- open_pubs_list
                      
                      closed_pubs_list <- pubs_list %>%
                        dplyr::filter(isOpenAccess == "N" | is.na(pmcid))
@@ -328,39 +328,46 @@ mod_abbrevimate_settings_box_server <- function(id){
                      
                      abbrs_vec <- unlist(abbrs_vec)
                      
-                     abbrs_tbl <- abbr_split_term_and_abbr(abbrs_vec)
-                     
-                     abbrs_tbl$abbr_pattern <- purrr::map_chr(abbrs_tbl$abbr, abbr_abbreviation_to_pattern)
-                     
-                     abbrs_tbl$is_abbr <- purrr::map2_lgl(.x = abbrs_tbl$full,
-                                                   .y = abbrs_tbl$abbr_pattern,
-                                                   .f = ~ stringr::str_detect(string = .x,
-                                                                              pattern = .y))
-                     
-                     abbrs_true <- abbrs_tbl %>%
-                       dplyr::filter(is_abbr == TRUE) %>%
-                       dplyr::select(abbr)
-                     
-                     abbrs_false <- abbrs_tbl %>%
-                       dplyr::filter(is_abbr != TRUE) %>%
-                       dplyr::select(abbr)
-                     
-                     abbr_return_values <- list(
+                     if(length(abbrs_vec) == 0){
+                       abbrs_true <- "Nothing found"
+                       abbrs_false <- "Nothing found"
+                     } else {
+                       abbrs_tbl <- abbr_split_term_and_abbr(abbrs_vec)
+                       
+                       abbrs_tbl$abbr_pattern <- purrr::map_chr(abbrs_tbl$abbr, abbr_abbreviation_to_pattern)
+                       
+                       abbrs_tbl$is_abbr <- purrr::map2_lgl(.x = abbrs_tbl$full,
+                                                            .y = abbrs_tbl$abbr_pattern,
+                                                            .f = ~ stringr::str_detect(string = .x,
+                                                                                       pattern = stringr::regex(.y,
+                                                                                                                ignore_case = TRUE)))
+                       
+                       abbrs_true <- abbrs_tbl %>%
+                         dplyr::filter(is_abbr == TRUE) %>%
+                         dplyr::select(abbr) %>%
+                         dplyr::mutate(abbr = stringr::str_to_lower(abbr)) %>%
+                         unique()
+                       
+                      
+                       abbrs_false <- abbrs_tbl %>%
+                         dplyr::filter(is_abbr != TRUE) %>%
+                         dplyr::select(abbr) %>%
+                         dplyr::mutate(abbr = stringr::str_to_lower(abbr)) %>%
+                         unique()
+                       
+                     }
+                     rv$analysis_results <- list(
                        true_abbr = abbrs_true,
                        false_abbr = abbrs_false,
                        closed_papers = closed_pubs_list
                      )
-                     
-                     return(abbr_return_values)
-                     
-                     
+                    
+                     return(rv$analysis_results)
                    }
-                   
                  })
     
+    return(reactive(rv$analysis_results))
   })
-  
- 
 }
 
 ## To be copied in the UI

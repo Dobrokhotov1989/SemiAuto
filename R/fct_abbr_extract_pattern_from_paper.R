@@ -12,7 +12,8 @@ abbr_extract_pattern_from_paper <- function(x, pattern, derivatives = FALSE){
   if(rlang::is_false(derivatives)){
     
     results <- stringr::str_extract_all(string = x,
-                               pattern = pattern) %>%
+                                        pattern = stringr::regex(pattern,
+                                                                 ignore_case = TRUE)) %>%
       purrr::flatten_chr()
     
     return(results)
@@ -23,7 +24,8 @@ abbr_extract_pattern_from_paper <- function(x, pattern, derivatives = FALSE){
   if (rlang::is_true(derivatives)) {
     
     results <- stringr::str_extract_all(string = xml2::as_list(x),
-                               pattern = pattern) %>%
+                               pattern = stringr::regex(pattern,
+                                                        ignore_case = TRUE)) %>%
       purrr::flatten_chr()
     
     return(results)

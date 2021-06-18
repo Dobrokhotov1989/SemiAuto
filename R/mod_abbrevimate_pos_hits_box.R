@@ -32,7 +32,7 @@ mod_abbrevimate_pos_hits_box_ui <- function(id){
 #' abbrevimate_pos_hits_box Server Functions
 #'
 #' @noRd 
-mod_abbrevimate_pos_hits_box_server <- function(id, pos_hits = ""){
+mod_abbrevimate_pos_hits_box_server <- function(id, hits){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
     
@@ -80,11 +80,26 @@ mod_abbrevimate_pos_hits_box_server <- function(id, pos_hits = ""){
     
 
     output$pos_hits <- DT::renderDataTable({
-      if(not_null(pos_hits)){
-      tibble::tibble(a = pos_hits)
+      
+      if(not_null(hits()$true_abbr)){
+        results_tbl <- tibble::tibble(Results = hits()$true_abbr)
+        selected <- seq_along(results_tbl$Results)
       } else {
-        tibble::tibble(a = "Nothing to show")
+        results_tbl <- tibble::tibble(Results = "Nothing to show")
+        selected <- NULL
       }
+      
+      DT::datatable(
+        data = results_tbl,
+        rownames = FALSE,
+        selection = list(
+          mode = "multiple",
+          selected = selected,
+          target = "row",
+          selectable = TRUE
+        )
+      )
+      
     })
     
   })

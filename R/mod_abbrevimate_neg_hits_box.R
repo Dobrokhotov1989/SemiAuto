@@ -31,7 +31,7 @@ mod_abbrevimate_neg_hits_box_ui <- function(id){
 #' abbrevimate_neg_hits_box Server Functions
 #'
 #' @noRd 
-mod_abbrevimate_neg_hits_box_server <- function(id){
+mod_abbrevimate_neg_hits_box_server <- function(id, hits){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
     
@@ -79,8 +79,23 @@ mod_abbrevimate_neg_hits_box_server <- function(id){
     })
     
     output$neg_hits <- DT::renderDataTable({
-      tibble::tibble(a = 1:3,
-                     b = LETTERS[1:3])
+      
+      if(not_null(hits()$false_abbr)){
+        results_tbl <- tibble::tibble(Results = hits()$false_abbr)
+      } else {
+        results_tbl <- tibble::tibble(Results = "Nothing to show")
+      }
+      
+      DT::datatable(
+        data = results_tbl,
+        rownames = FALSE,
+        selection = list(
+          mode = "multiple",
+          selected = NULL,
+          target = "row",
+          selectable = TRUE
+        )
+      )
     })
   })
 }
