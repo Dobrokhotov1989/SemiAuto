@@ -352,20 +352,20 @@ I will test that.
 as_list(full_xml) %>% flatten_chr() returns error 
 `r as_list(full_xml) %>% flatten_chr()`
 *
- 
+
 ```{r functions_for_searching}
 # Directly on the xml
 xml_extr <- function(full_xml, pattern){
   str_extract_all(string = full_xml,
                   pattern = pattern) %>%
     flatten_chr()
-  }
+}
 
 # Directly on the full list
 list_extr <- function(full_xml, pattern){
   str_extract_all(string = as_list(full_xml),
                   pattern = pattern) %>%
-  flatten_chr()
+    flatten_chr()
 }
 
 # Clean list 
@@ -437,7 +437,7 @@ microbenchmark::microbenchmark(
   list_f = list_extr(full_xml, pattern = "blebbistatin"),
   vector = clean_vector(full_xml, pattern = "blebbistatin"),
   string = clean_string(full_xml, pattern = "blebbistatin"),
- check = "equivalent" 
+  check = "equivalent" 
 )
 ```
 After manual checking it turns that during the cleaning, one of the "blebbistatin"
@@ -578,8 +578,8 @@ my_pattern <- abbr_term_to_pattern(term = "blebbistatin",
 full_xml <- europepmc::epmc_ftxt(ext_id = open_results$pmcid[[5]])
 
 abbr_vec <- abbr_extract_pattern(x = full_xml,
-                     pattern = my_pattern,
-                     derivatives = TRUE)
+                                 pattern = my_pattern,
+                                 derivatives = TRUE)
 
 abbr_vec
 ```
@@ -603,7 +603,7 @@ character string.
 # Split full term and abbreviation and convert to tibble
 abbr_tbl <- abbr_vec %>%
   purrr::map(~ str_split_fixed(string = (.x),
-                             pattern = " \\(", n = 2)) %>%
+                               pattern = " \\(", n = 2)) %>%
   unlist() %>%
   matrix(ncol = 2, byrow = TRUE) %>%
   as_tibble() %>%
@@ -611,13 +611,14 @@ abbr_tbl <- abbr_vec %>%
 
 # Remove trailing ")" from abbr
 abbr_tbl$abbr <- purrr::map_chr(abbr_tbl$abbr,
-                            .f = function(x){stringr::str_sub(x, 1, -2)})
+                                .f = function(x){stringr::str_sub(x, 1, -2)})
 
 abbr_tbl
 
 #Same as a function
 abbr_split_term_and_abbr <- function(x){
   
+  #Split part before parenthesis and in parenthesis
   abbr_tbl <- x %>%
     purrr::map(~ str_split_fixed(string = (.x),
                                  pattern = " \\(", n = 2)) %>%
@@ -626,8 +627,47 @@ abbr_split_term_and_abbr <- function(x){
     tibble::as_tibble() %>%
     dplyr::rename_with(.f = function(x){c("full", "abbr")})
   
+  #Remove parenthesis
   abbr_tbl$abbr <- purrr::map_chr(abbr_tbl$abbr,
-                            .f = function(x){stringr::str_sub(x, 1, -2)})
+                                  .f = function(x){stringr::str_sub(x, 1, -2)})
+  
+  return(abbr_tbl)
+}
+
+```
+
+As I start testing the app, I found that sometimes abbreviations are defined in 
+parenthesis, as expected, but there are more text after abbreviation inside the 
+same parenthesis, separated from the abbreviation by comma. If all text inside 
+parenthesis will be transformed into the pattern, it would definitely not match
+with the term, hence we need to extract this first part of the text in parenthesis.
+
+```{r split_abbr_and_extra}
+abbr_split_term_and_abbr <- function(x){
+  
+  # Split part before parenthesis and in parenthesis
+  abbr_tbl <- x %>%
+    purrr::map(~ str_split_fixed(string = (.x),
+                                 pattern = " \\(", n = 2)) %>%
+    unlist() %>%
+    matrix(ncol = 2, byrow = TRUE) %>%
+    tibble::as_tibble() %>%
+    dplyr::rename_with(.f = function(x){c("full", "abbr")})
+  
+  # Remove parenthesis
+  abbr_tbl$abbr <- purrr::map_chr(abbr_tbl$abbr,
+                                  .f = function(x){stringr::str_sub(x, 1, -2)})
+  
+  # If "extra text" present inside parenthesis then everything after comma, 
+  # semicolon or period will be removed
+  abbr_tbl$abbr <- purrr::map_chr(abbr_tbl$abbr, .f = function(x){
+    if(stringr::str_detect(x, pattern = ",|[.]|;")){
+      return(stringr::str_replace(x, pattern = "(,|[.]|;).*", replacement = ""))
+    } else {
+      return(x)
+    }
+    
+  })
   
   return(abbr_tbl)
 }
@@ -651,16 +691,176 @@ abbr_abbreviation_to_pattern <- function(x){
                              pattern = "\\)",
                              replacement = "\\\\)") %>%
     
-  return(pattern)
+    return(pattern)
 }
 
 abbr_tbl$abbr_pattern <- map_chr(abbr_tbl$abbr, abbr_abbreviation_to_pattern)
 
+#This works only when case is matched
 abbr_tbl$is_abbr <- map2_lgl(.x = abbr_tbl$full,
                              .y = abbr_tbl$abbr_pattern,
                              .f = ~ stringr::str_detect(string = .x,
                                                         pattern = .y))
 
+#To make it case insensitive use stringr::regex(..., ingore_case = TRUE)
+
+abbrs_tbl$is_abbr <- purrr::map2_lgl(.x = abbrs_tbl$full,
+                                     .y = abbrs_tbl$abbr_pattern,
+                                     .f = ~ stringr::str_detect(
+                                       string = .x,
+                                       pattern = stringr::regex(.y,
+                                                                ignore_case = TRUE)
+                                     )
+)
 
 
+
+```
+
+As I tested app, I faced an issue with the special characters appears in the 
+abbreviations (not only parenthesis) and thus ruin the pattern (leading to the 
+error). In order to avoid it these characters from abbreviation should be escaped.
+
+```{r special_characters}
+# These special characters have to be escaped
+special_characters <- c(".", "+", "*", "?", "^", "$", "(", ")",
+                        "[", "]", "{", "}", "|", "\\")
+
+# In the pattern we have repetitive .* pattern followed and predicated by text 
+# characters; if any of special characters appears prior to .* it is a "text" 
+# character and escape characters should be added in front of that
+# Hence the following pattern should be searched
+special_characters_in_context <- 
+  stringr::str_c( "\\", special_characters, "\\.\\*", collapse = "|") %>%
+  stringr::str_c("(", ., ")")
+
+# As special character can appear as a last character in the string
+# the pattern above wouldn't catch it, so we need to as extra condition
+# for the last characters
+
+special_characters_in_context_2 <- 
+  stringr::str_c( "\\", special_characters, collapse = "|") %>%
+  stringr::str_c("((", ., ")$)")
+
+special_characters_full <- stringr::str_c(special_characters_in_context,
+                                          special_characters_in_context_2,
+                                          sep = "|")
+
+test_vector <- "my text with characters." %>%
+  stringr::str_to_lower(locale = "en") %>%
+  stringr::str_split(., pattern = "", simplify = TRUE) %>%
+  stringr::str_c(., collapse = ".*") %>%
+  stringr::str_c("\\b", ., sep = "")
+
+test_vector[2] <- "other text * with ( characters" %>%
+  stringr::str_to_lower(locale = "en") %>%
+  stringr::str_split(., pattern = "", simplify = TRUE) %>%
+  stringr::str_c(., collapse = ".*") %>%
+  stringr::str_c("\\b", ., sep = "")
+
+result_vector <- purrr::map_chr(
+  test_vector,
+  function(x){
+    # locate start positions of the special characters to be escaped 
+    positions <- stringr::str_locate_all(x, pattern = special_characters_full)
+    start_pos <- positions[[1]][,1]
+    
+    # Adjust start position to insert chracters in -1 position
+    start_pos <- start_pos - 1
+    
+    # Convert to the number of characters in each group
+    groups <- c(start_pos[[1]], (start_pos - dplyr::lag(start_pos))[-1])
+    
+    # Make a pattern to match number of characters
+    groups_patterns <- purrr::map_chr(groups,
+                                      ~stringr::str_c("(.{", .x, "})"))
+    
+    # Complete the full pattern
+    full_groups <- stringr::str_c("^",
+                                  stringr::str_c(groups_patterns, collapse = ""),
+                                  "(.+)$")
+    
+    # Create a replacement pattern
+    n_of_groups <- length(start_pos)+1
+    replacement_pattern_immature <-
+      stringr::str_c("\\", seq_along(start_pos), collapse = "\\\\")
+    replacement_pattern <- stringr::str_c(replacement_pattern_immature, n_of_groups,
+                                          sep = "\\\\\\")
+    
+    # Add escape characters to the text
+    complete_pattern <- stringr::str_replace_all(string = x,
+                                                 pattern = full_groups,
+                                                 replacement = replacement_pattern)
+    return(complete_pattern)
+  })
+
+# above function added inside the abbreviation_to_pattern function
+abbr_abbreviation_to_pattern <- function(x){
+  pattern <- x %>%
+    stringr::str_to_lower(locale = "en") %>%
+    stringr::str_split(., pattern = "", simplify = TRUE) %>%
+    stringr::str_c(., collapse = ".*") %>%
+    stringr::str_c("\\b", ., sep = "") 
+  
+  special_characters <- c(".", "+", "*", "?", "^", "$", "(", ")",
+                          "[", "]", "{", "}", "|", "\\")
+  
+  
+  special_characters_in_context <- 
+    stringr::str_c( "\\", special_characters, "\\.\\*", collapse = "|") %>%
+    stringr::str_c("(", ., ")")
+  
+  
+  
+  special_characters_in_context_2 <- 
+    stringr::str_c( "\\", special_characters, collapse = "|") %>%
+    stringr::str_c("((", ., ")$)")
+  
+  special_characters_full <- stringr::str_c(special_characters_in_context,
+                                            special_characters_in_context_2,
+                                            sep = "|")
+  
+  
+  complete_pattern <- purrr::map_chr(
+    pattern,
+    function(x){
+      if(stringr::str_detect(x, pattern = special_characters_full)){
+        # locate start positions of the special characters to be escaped 
+        positions <- stringr::str_locate_all(x, pattern = special_characters_full)
+        start_pos <- positions[[1]][,1]
+        
+        # Adjust start position to insert chracters in -1 position
+        start_pos <- start_pos - 1
+        
+        # Convert to the number of characters in each group
+        groups <- c(start_pos[[1]], (start_pos - dplyr::lag(start_pos))[-1])
+        
+        # Make a pattern to match number of characters
+        groups_patterns <- purrr::map_chr(groups,
+                                          ~stringr::str_c("(.{", .x, "})"))
+        
+        # Complete the full pattern
+        full_groups <- stringr::str_c("^",
+                                      stringr::str_c(groups_patterns, collapse = ""),
+                                      "(.+)$")
+        
+        # Create a replacement pattern
+        n_of_groups <- length(start_pos)+1
+        replacement_pattern_immature <-
+          stringr::str_c("\\", seq_along(start_pos), collapse = "\\\\")
+        replacement_pattern <- stringr::str_c(replacement_pattern_immature, n_of_groups,
+                                              sep = "\\\\\\")
+        
+        # Add escape characters to the text
+        complete_pattern <- stringr::str_replace_all(string = x,
+                                                     pattern = full_groups,
+                                                     replacement = replacement_pattern)
+        return(complete_pattern)} else {
+          return(x)
+        }
+      
+    })
+  
+  return(complete_pattern)
+}
 ```

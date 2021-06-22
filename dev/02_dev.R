@@ -19,6 +19,7 @@ usethis::use_package( "shinydashboard" )
 usethis::use_package( "shinydashboardPlus" )
 usethis::use_package( "shinyWidgets" )
 usethis::use_package( "shinyBS" )
+usethis::use_package( "shinyjs" )
 usethis::use_package( "waiter" )
 usethis::use_package( "europepmc" )
 usethis::use_package( "ggplot2" )
@@ -47,7 +48,7 @@ golem::add_module( name = "home_reading_time_box" ) # Name of the module
 golem::add_module( name = "abbrevimate_settings_box" ) # Name of the module
 golem::add_module( name = "abbrevimate_pos_hits_box" ) # Name of the module
 golem::add_module( name = "abbrevimate_neg_hits_box" ) # Name of the module
-golem::add_module( name = "abbrevimate_library_box" ) # Name of the module
+golem::add_module( name = "abbrevimate_dictionary_box" ) # Name of the module
 
 ## Add helper functions ----
 ## Creates fct_* and utils_*
@@ -59,7 +60,6 @@ golem::add_fct( "abbr_split_term_and_abbr" )
 
 
 golem::add_utils( "helpers" )
-golem::add_utils( "abbrevimate" )
 
 
 ## External resources

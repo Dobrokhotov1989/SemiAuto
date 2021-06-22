@@ -26,12 +26,9 @@ mod_abbrevimate_settings_box_ui <- function(id){
       ),
       br(),
       
-      htmlOutput(outputId = ns("search_input"))
+      htmlOutput(outputId = ns("search_input")),
       
-    ),
-    
-    column(
-      width = 4,
+      br(),
       shinyWidgets::radioGroupButtons(
         inputId = ns("source"),
         choices = c("EuropePMC", 
@@ -40,26 +37,26 @@ mod_abbrevimate_settings_box_ui <- function(id){
         justified = TRUE
       ),
       br(),
-      htmlOutput(outputId = ns("source_input")),
-      br(),
-      shiny::actionButton(inputId = ns("search"),
-                          label = "Search",
-                          icon = shiny::icon("search"))
+      htmlOutput(outputId = ns("source_input"))
       
     ),
     
     column(
       width = 4,
-      shinyWidgets::materialSwitch(
-        inputId = ns("advanced"),
-        label = "Advanced settings",
-        value = FALSE, 
-        status = "info"
-      ),
       htmlOutput(outputId = ns("advanced_set")),
       textOutput(outputId = ns("text"))
       
+    ),
+    
+    column(
+      width = 4,
+      shiny::actionButton(inputId = ns("search"),
+                          label = "Search",
+                          icon = shiny::icon("search"))
+      
     )
+    
+    
   )
   
 }
@@ -70,73 +67,7 @@ mod_abbrevimate_settings_box_ui <- function(id){
 mod_abbrevimate_settings_box_server <- function(id){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
-    
     rv <- reactiveValues()
-    
-    #### Remember typed in the searchInput field text ####
-    rv$search_term <- ""
-    rv$query <- ""
-    rv$deriv <- FALSE
-    rv$precise <- FALSE
-    rv$max <- 0
-    rv$dates <- NULL
-    
-    
-    
-    observeEvent(
-      eventExpr = {
-        
-        input$search_term_search
-        input$search
-      },
-      handlerExpr = {
-        
-        rv$search_term <- input$search_term
-      })
-    
-    observeEvent(input$search_term_reset, {
-      rv$search_term <- ""
-    })
-    
-    observeEvent(
-      eventExpr = {
-        
-        input$epmc_query_search
-        input$search
-      }, 
-      
-      handlerExpr = {
-        
-        rv$query <- input$epmc_query
-      })
-    
-    observeEvent(input$epmc_query_reset, {
-      rv$query <- ""
-    })
-    
-    observeEvent(input$derivatives, {
-      rv$deriv <- input$derivatives
-    })
-    
-    observeEvent(input$precise, {
-      rv$precise <- input$precise
-    })
-    
-    
-    max_pubs <- reactive({
-      if (is.null(input$max_pubs)) { return(0)} else {return(input$max_pubs)}
-    })
-    
-    rv$max <- max_pubs
-    
-    observeEvent(
-      eventExpr = {
-        input$advanced
-        input$precise
-      },
-      handlerExpr = {
-        rv$dates <- input$dates
-      })
     
     #### Render UI based on the conditions ####
     output$search_input <- renderUI({
@@ -163,13 +94,11 @@ mod_abbrevimate_settings_box_server <- function(id){
         )
         return(field)
       } else {
-        field <- shinyWidgets::searchInput(
+        field <- shiny::textInput(
           inputId = ns("search_term"), 
           label = "Enter term here",
           placeholder = "...",
-          value = rv$search_term,
-          btnSearch = shiny::icon("save"), 
-          btnReset = shiny::icon("remove"),
+          value = NULL,
           width = "100%"
         )
         return(field)
@@ -178,20 +107,7 @@ mod_abbrevimate_settings_box_server <- function(id){
     
     output$source_input <- renderUI({
       
-      if (input$source == "EuropePMC" &
-          rlang::is_false(input$batch)){
-        
-        field <- shinyWidgets::searchInput(
-          inputId = ns("epmc_query"), 
-          label = "Enter query here",
-          placeholder = "...",
-          value = rv$query,
-          btnSearch = shiny::icon("save"), 
-          btnReset = shiny::icon("remove"),
-          width = "100%"
-        )
-        return(field)
-      } else if (input$source == "Local files"){
+      if (input$source == "Local files"){
         
         field <- shiny::fileInput(
           inputId = ns("source_local"),
@@ -204,43 +120,36 @@ mod_abbrevimate_settings_box_server <- function(id){
     })
     
     output$advanced_set <- renderUI({
-      
-      rv$max <- shiny::restoreInput(id = ns("max_pubs"), default = 0)
-      
-      if (isTRUE(input$advanced)){
-        if (input$source == "EuropePMC") {
-          
-          field <- tagList(
-            shinyWidgets::materialSwitch(
-              inputId = ns("derivatives"),
-              label = "Include derivatives",
-              value = rv$deriv, 
-              status = "info"
-            ),
-            shinyWidgets::searchInput(inputId = ns("max_pubs"), 
-                                      label = "Max number of publication (0 for unlimited)",
-                                      value = max_pubs(),
-                                      width = "100%"),
-            shinyWidgets::materialSwitch(
-              inputId = ns("precise"),
-              label = "Precise date range",
-              value = rv$precise, 
-              status = "info"
-            ),
-            htmlOutput(outputId = ns("date_range_ui"))
+      if (input$source == "EuropePMC") {
+        
+        field <- tagList(
+          shinyWidgets::materialSwitch(
+            inputId = ns("derivatives"),
+            label = "Include derivatives",
+            status = "info"
+          ),
+          numericInput(inputId = ns("max_pubs"), 
+                       label = "Max number of pubs (0 = inf)",
+                       value = 0,
+                       width = "100%"),
+          shinyWidgets::materialSwitch(
+            inputId = ns("precise"),
+            label = "Precise date range",
+            status = "info"
+          ),
+          htmlOutput(outputId = ns("date_range_ui"))
+        )
+        
+      } else {
+        field <- tagList(
+          shinyWidgets::materialSwitch(
+            inputId = ns("derivatives"),
+            label = "Include derivatives",
+            status = "info"
           )
-          
-        } else {
-          field <- tagList(
-            shinyWidgets::materialSwitch(
-              inputId = ns("derivatives"),
-              label = "Include derivatives",
-              value = rv$deriv, 
-              status = "info"
-            )
-          )
-        }
+        )
       }
+      
       
     })
     
@@ -252,7 +161,6 @@ mod_abbrevimate_settings_box_server <- function(id){
         field <- shinyWidgets::airDatepickerInput(
           inputId = ns("dates"),
           label = "Select years range",
-          value = rv$dates,
           range = TRUE,
           minDate = paste0(oldest_pub_year(), "-01-01"),
           maxDate = Sys.Date(),
@@ -265,7 +173,6 @@ mod_abbrevimate_settings_box_server <- function(id){
         field <- shinyWidgets::airDatepickerInput(
           inputId = ns("dates"),
           label = "Select years range",
-          value = rv$dates,
           range = TRUE,
           minDate = paste0(oldest_pub_year(), "-01-01"),
           maxDate = Sys.Date(),
@@ -277,94 +184,147 @@ mod_abbrevimate_settings_box_server <- function(id){
       }
     })
     
-    observeEvent(input$search,
-                 {
-                   require(magrittr)
-                   #For batch mode - read uploaded csv file 
-                   if(rlang::is_true(input$batch)){
-                     terms_list = readr::read_csv(file = input$search_batch,
-                                                  col_names = input$header)
-                     #tibble to vector; if more then one column - use only first
-                     terms_list = dplyr::pull(terms_list, 1)
-                   }
-                   
-                   if(input$source == "EuropePMC" & rlang::is_false(input$batch)){
-                     
-                     
-                     
-                     pubs_list <- abbr_epmc_search(query = input$epmc_query,
-                                                   limit = 20,#rv$max,
-                                                   date_range = rv$dates,
-                                                   precise = rv$precise)
-                     
-                     pattern <- abbr_term_to_pattern(term = input$search_term,
-                                                     derivatives = rv$deriv)
-                     
-                     #Split pubs_list on the "searchable" (open) and unsearchable (closed) papers
-                     open_pubs_list <- pubs_list %>%
-                       dplyr::filter(isOpenAccess == "Y" &
-                                       not_na(pmcid)) 
-                     
-                     open_pubs_list <- open_pubs_list
-                     
-                     closed_pubs_list <- pubs_list %>%
-                       dplyr::filter(isOpenAccess == "N" | is.na(pmcid))
-                     
-                     abbrs_vec <- c()
-                     
-                     abbrs_vec <- purrr::map(open_pubs_list$pmcid,
-                                             function(x){
-                                               
-                                               paper <- europepmc::epmc_ftxt(ext_id = x)
-                                               
-                                               abbrs_vec <- append(abbrs_vec,
-                                                                   abbr_extract_pattern_from_paper(x = paper,
-                                                                                                   pattern = pattern,
-                                                                                                   derivatives = rv$deriv)
-                                               )
-                                               
-                                               return(abbrs_vec)
-                                             })
-                     
-                     abbrs_vec <- unlist(abbrs_vec)
-                     
-                     if(length(abbrs_vec) == 0){
-                       abbrs_true <- "Nothing found"
-                       abbrs_false <- "Nothing found"
-                     } else {
-                       abbrs_tbl <- abbr_split_term_and_abbr(abbrs_vec)
-                       
-                       abbrs_tbl$abbr_pattern <- purrr::map_chr(abbrs_tbl$abbr, abbr_abbreviation_to_pattern)
-                       
-                       abbrs_tbl$is_abbr <- purrr::map2_lgl(.x = abbrs_tbl$full,
-                                                            .y = abbrs_tbl$abbr_pattern,
-                                                            .f = ~ stringr::str_detect(string = .x,
-                                                                                       pattern = stringr::regex(.y,
-                                                                                                                ignore_case = TRUE)))
-                       
-                       abbrs_true <- abbrs_tbl %>%
-                         dplyr::filter(is_abbr == TRUE) %>%
-                         dplyr::select(abbr) %>%
-                         dplyr::mutate(abbr = stringr::str_to_lower(abbr)) %>%
-                         unique()
-                       
-                      
-                       abbrs_false <- abbrs_tbl %>%
-                         dplyr::filter(is_abbr != TRUE) %>%
-                         dplyr::select(abbr) %>%
-                         dplyr::mutate(abbr = stringr::str_to_lower(abbr)) %>%
-                         unique()
-                       
-                     }
-                     rv$analysis_results <- list(
-                       true_abbr = abbrs_true,
-                       false_abbr = abbrs_false,
-                       closed_papers = closed_pubs_list
-                     )
-                    
-                     return(rv$analysis_results)
-                   }
-                 })
+    #### Search functionality ####
+    observeEvent(input$search, {
+      
+      if(!is.numeric(input$max_pubs)){
+        
+        shinyWidgets::sendSweetAlert(
+          session = session,
+          title = "Warning",
+          text = "Max number of pubs should be a number",
+          type = "warning"
+        )
+        
+      } else if(input$search_term == "") {
+        shinyWidgets::sendSweetAlert(
+          session = session,
+          title = "Warning",
+          text = "Enter term",
+          type = "warning"
+        )
+      } else {
+        
+        require(magrittr)
+        
+        shinyWidgets::progressSweetAlert(
+          session = session, id = "myprogress",
+          title = "Loading list of papers",
+          display_pct = TRUE, value = 0
+        )
+        
+        #For batch mode - read uploaded csv file 
+        if(rlang::is_true(input$batch)){
+          terms_list = readr::read_csv(file = input$search_batch,
+                                       col_names = input$header)
+          #tibble to vector; if more then one column - use only first
+          terms_list = dplyr::pull(terms_list, 1)
+        }
+        
+        if(input$source == "EuropePMC" & rlang::is_false(input$batch)){
+          
+          # Limit set at x5 of max_pubs limit to ensure max_pubs number of open
+          # access publication.
+          pubs_list <- abbr_epmc_search(query = input$search_term,
+                                        limit = input$max_pubs*5,
+                                        date_range = input$dates,
+                                        precise = input$precise)
+          
+          pattern <- abbr_term_to_pattern(term = input$search_term,
+                                          derivatives = input$derivatives)
+          
+          #Split pubs_list on the "searchable" (open) and unsearchable (closed) papers
+          open_pubs_list <- pubs_list %>%
+            dplyr::filter(isOpenAccess == "Y" &
+                            not_na(pmcid)) 
+          if (nrow(open_pubs_list) > input$max_pubs){
+            open_pubs_list <- open_pubs_list[1:input$max_pubs, ]
+          }
+          
+          closed_pubs_list <- pubs_list %>%
+            dplyr::filter(isOpenAccess == "N" | is.na(pmcid))
+          
+          abbrs_vec <- c()
+          
+          shinyWidgets::updateProgressBar(
+            session = session,
+            id = "myprogress",
+            title = sprintf("Work in progress (total %s papers to analyze)",
+                            nrow(open_pubs_list)),
+            value = 0,
+            total = nrow(open_pubs_list)
+          )
+          
+          abbrs_vec <- purrr::map2(
+            open_pubs_list$pmcid,
+            seq_along(open_pubs_list$pmcid),
+            function(x, y){
+              
+              shinyWidgets::updateProgressBar(
+                session = session,
+                id = "myprogress",
+                value = y,
+                total = nrow(open_pubs_list)
+              )
+              
+              paper <- europepmc::epmc_ftxt(ext_id = x)
+              
+              abbrs_vec <- append(abbrs_vec,
+                                  abbr_extract_pattern_from_paper(x = paper,
+                                                                  pattern = pattern,
+                                                                  derivatives = input$derivatives)
+              )
+              
+              return(abbrs_vec)
+            })
+          
+          abbrs_vec <- unlist(abbrs_vec)
+          
+          if(length(abbrs_vec) == 0){
+            abbrs_true <- "Nothing found"
+            abbrs_false <- "Nothing found"
+          } else {
+            
+            abbrs_vec <- remove_tags(abbrs_vec)
+            abbrs_tbl <- abbr_split_term_and_abbr(abbrs_vec)
+            
+            abbrs_tbl$abbr_pattern <- purrr::map_chr(abbrs_tbl$abbr, abbr_abbreviation_to_pattern)
+            
+            abbrs_tbl$is_abbr <- purrr::map2_lgl(
+              .x = abbrs_tbl$full,
+              .y = abbrs_tbl$abbr_pattern,
+              .f = ~ stringr::str_detect(
+                string = .x,
+                pattern = stringr::regex(.y,
+                                         ignore_case = TRUE)) &
+                # This necessary to exclude single characters
+                # > 3 because nchar("\\b") = 2 and pattern of 
+                # single character is "\\b_"
+                nchar(.y) > 3)
+            
+            abbrs_true <- abbrs_tbl %>%
+              dplyr::filter(is_abbr == TRUE) %>%
+              dplyr::select(abbr) %>%
+              dplyr::mutate(abbr = stringr::str_to_lower(abbr)) %>%
+              unique()
+            
+            
+            abbrs_false <- abbrs_tbl %>%
+              dplyr::filter(is_abbr != TRUE) %>%
+              dplyr::select(abbr) %>%
+              dplyr::mutate(abbr = stringr::str_to_lower(abbr)) %>%
+              unique()
+            
+          }
+          rv$analysis_results <- list(
+            true_abbr = abbrs_true,
+            false_abbr = abbrs_false,
+            closed_papers = closed_pubs_list
+          )
+          shinyWidgets::closeSweetAlert(session = session)
+          return(rv$analysis_results)
+        }}
+    })
     
     return(reactive(rv$analysis_results))
   })

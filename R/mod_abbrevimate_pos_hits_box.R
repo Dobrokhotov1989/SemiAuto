@@ -18,7 +18,7 @@ mod_abbrevimate_pos_hits_box_ui <- function(id){
       icon = shiny::icon("folder-plus"),
       
       htmlOutput(outputId = ns("bttns_pos_hits")),
-
+      
       br(),
       br(),
       
@@ -35,6 +35,7 @@ mod_abbrevimate_pos_hits_box_ui <- function(id){
 mod_abbrevimate_pos_hits_box_server <- function(id, hits){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
+    rv <- reactiveValues()
     
     output$bttns_pos_hits <- renderUI({
       tagList(
@@ -78,12 +79,19 @@ mod_abbrevimate_pos_hits_box_server <- function(id, hits){
       )
     })
     
-
+    
     output$pos_hits <- DT::renderDataTable({
       
       if(not_null(hits()$true_abbr)){
-        results_tbl <- tibble::tibble(Results = hits()$true_abbr)
-        selected <- seq_along(results_tbl$Results)
+        #nrow() part necessary because sometimes empty tibble appears in hits()
+        if(hits()$true_abbr != "Nothing found" & nrow(hits()$true_abbr) > 0){
+          results_tbl <- hits()$true_abbr
+          colnames(results_tbl) <- "Results"
+          selected <- seq_along(results_tbl$Results)
+        } else {
+          results_tbl <- tibble::tibble(Results = "Nothing found")
+          selected <- NULL
+        }
       } else {
         results_tbl <- tibble::tibble(Results = "Nothing to show")
         selected <- NULL
@@ -102,6 +110,28 @@ mod_abbrevimate_pos_hits_box_server <- function(id, hits){
       
     })
     
+    #This part is necessary to update table selection
+    proxy <- DT::dataTableProxy("pos_hits")
+    
+    observeEvent(input$select_all, {
+      DT::selectRows(proxy = proxy,
+                     selected = input$pos_hits_rows_all)
+    })
+    
+    observeEvent(input$deselect_all, {
+      DT::selectRows(proxy = proxy,
+                     selected = NULL)
+    })
+    
+    #Add to library
+    observeEvent(input$add_to_lib, {
+      if(not_null(hits())){
+        rv$pos_to_dictionaty <- hits()$true_abbr[input$pos_hits_rows_selected,]
+        return(rv$pos_to_dictionaty)
+      }
+    })
+    
+    return(reactive(rv$pos_to_dictionaty))
   })
 }
 

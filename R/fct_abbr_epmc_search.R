@@ -42,7 +42,9 @@ abbr_epmc_search <- function(query, limit = 0, date_range = NULL, precise = FALS
   # limit == 0 means "unlimited" number of publications
   # "unlimited' == maximum number of hits
   if (limit == 0) {
-    limit <- europepmc::epmc_hits(query = query_full)
+    # europepmc::epmc_hits() somethimes returns less records
+    # than europepmc::epmc_search(), hence 1000 added as precautions
+    limit <- europepmc::epmc_hits(query = query_full)+1000
   }
   
   search_results <- europepmc::epmc_search(

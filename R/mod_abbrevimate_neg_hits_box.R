@@ -34,7 +34,7 @@ mod_abbrevimate_neg_hits_box_ui <- function(id){
 mod_abbrevimate_neg_hits_box_server <- function(id, hits){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
-    
+    rv <- reactiveValues()
     
     output$bttns_neg_hits <- renderUI({
       tagList(
@@ -42,7 +42,7 @@ mod_abbrevimate_neg_hits_box_server <- function(id, hits){
           
           shinyBS::tipify(
             shinyWidgets::actionBttn(
-              inputId = ns("select_all_neg"),
+              inputId = ns("select_all"),
               label = shiny::icon("check"),
               style = "material-flat",
               size = "sm"
@@ -53,7 +53,7 @@ mod_abbrevimate_neg_hits_box_server <- function(id, hits){
           
           shinyBS::tipify(
             shinyWidgets::actionBttn(
-              inputId = ns("deselect_all_neg"),
+              inputId = ns("deselect_all"),
               label = shiny::icon("remove"),
               style = "material-flat",
               size = "sm"
@@ -64,7 +64,7 @@ mod_abbrevimate_neg_hits_box_server <- function(id, hits){
           
           shinyBS::tipify(
             shinyWidgets::actionBttn(
-              inputId = ns("add_to_lib_neg"),
+              inputId = ns("add_to_lib"),
               label = shiny::icon("book-medical"),
               style = "material-flat",
               size = "sm"
@@ -81,7 +81,13 @@ mod_abbrevimate_neg_hits_box_server <- function(id, hits){
     output$neg_hits <- DT::renderDataTable({
       
       if(not_null(hits()$false_abbr)){
-        results_tbl <- tibble::tibble(Results = hits()$false_abbr)
+        #nrow() part necessary because sometimes empty tibble appears in hits()
+        if(hits()$false_abbr != "Nothing found" & nrow(hits()$false_abbr) > 0){
+          results_tbl <- tibble::tibble(Results = hits()$false_abbr)
+        } else {
+          results_tbl <- tibble::tibble(Results = "Nothing found")
+          selected <- NULL
+        }
       } else {
         results_tbl <- tibble::tibble(Results = "Nothing to show")
       }
@@ -97,6 +103,31 @@ mod_abbrevimate_neg_hits_box_server <- function(id, hits){
         )
       )
     })
+    
+    #This part is necessary to update table selection
+    proxy <- DT::dataTableProxy("neg_hits")
+    
+    observeEvent(input$select_all, {
+      DT::selectRows(proxy = proxy,
+                     selected = input$neg_hits_rows_all)
+    })
+    
+    observeEvent(input$deselect_all, {
+      DT::selectRows(proxy = proxy,
+                     selected = NULL)
+    })
+    
+    #Add to library
+    observeEvent(input$add_to_lib, {
+
+      if(not_null(hits()$false_abbr)){
+        rv$neg_to_dictionaty <- hits()$false_abbr[input$neg_hits_rows_selected,]
+        return(rv$neg_to_dictionaty)
+      }
+    })
+    
+    return(reactive(rv$neg_to_dictionaty))
+    
   })
 }
 

@@ -27,3 +27,20 @@ oldest_pub_year <- function(){
   x <- min(pubs_trend_all_years$year)
   return(x)
 }
+
+#' Remove html tags from text
+#'
+#' @return Returns character string with all tags removed
+#'
+#' @noRd
+#' 
+#' @examples
+#' remove_tags("some random text with <italic>html tags</italic>")
+
+
+#Function to remove html tags from the text of paper
+remove_tags <- function(htmlString) {
+  return(stringr::str_replace_all(string = htmlString,
+                                  pattern = "<.*?>",
+                                  replacement = ""))
+}
