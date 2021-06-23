@@ -237,7 +237,7 @@ mod_abbrevimate_settings_box_server <- function(id){
           open_pubs_list <- pubs_list %>%
             dplyr::filter(isOpenAccess == "Y" &
                             not_na(pmcid)) 
-          if (nrow(open_pubs_list) > input$max_pubs){
+          if (nrow(open_pubs_list) > input$max_pubs & input$max_pubs != 0){
             open_pubs_list <- open_pubs_list[1:input$max_pubs, ]
           }
           
@@ -267,15 +267,21 @@ mod_abbrevimate_settings_box_server <- function(id){
                 total = nrow(open_pubs_list)
               )
               
-              paper <- europepmc::epmc_ftxt(ext_id = x)
+              paper <- attempt::attempt({
+                europepmc::epmc_ftxt(ext_id = x)
+              })
               
-              abbrs_vec <- append(abbrs_vec,
-                                  abbr_extract_pattern_from_paper(x = paper,
-                                                                  pattern = pattern,
-                                                                  derivatives = input$derivatives)
-              )
+              if(attempt::is_try_error(paper)){
+                return(NULL)
+              } else {
+                abbrs_vec <- append(abbrs_vec,
+                                    abbr_extract_pattern_from_paper(x = paper,
+                                                                    pattern = pattern,
+                                                                    derivatives = input$derivatives)
+                )
+                return(abbrs_vec)
+              }
               
-              return(abbrs_vec)
             })
           
           abbrs_vec <- unlist(abbrs_vec)

@@ -15,7 +15,7 @@
 #' 
 #' ## End(Not run)
 
-abbr_epmc_search <- function(query, limit = 0, date_range = NULL, precise = FALSE){
+abbr_epmc_search <- function(query, limit = NULL, date_range = NULL, precise = FALSE){
   
   #Define full query
   #If date range is not defined by user
@@ -45,14 +45,15 @@ abbr_epmc_search <- function(query, limit = 0, date_range = NULL, precise = FALS
     # europepmc::epmc_hits() somethimes returns less records
     # than europepmc::epmc_search(), hence 1000 added as precautions
     limit <- europepmc::epmc_hits(query = query_full)+1000
-  }
-  
+  } 
+
   search_results <- europepmc::epmc_search(
-    query = query_full,
-    limit = limit, 
-    verbose = FALSE #verbose is error-prone
-  ) %>%
-    dplyr::select(pmid, pmcid, isOpenAccess, firstPublicationDate, inEPMC, inPMC)
-  
-  return(search_results)
+      query = query_full,
+      limit = limit, 
+      verbose = FALSE #verbose is error-prone
+    ) %>%
+      dplyr::select(pmid, pmcid, isOpenAccess, firstPublicationDate, inEPMC, inPMC)
+    
+    return(search_results)
+
 }

@@ -83,14 +83,16 @@ mod_abbrevimate_pos_hits_box_server <- function(id, hits){
     output$pos_hits <- DT::renderDataTable({
       
       if(not_null(hits()$true_abbr)){
-        #nrow() part necessary because sometimes empty tibble appears in hits()
-        if(hits()$true_abbr != "Nothing found" & nrow(hits()$true_abbr) > 0){
-          results_tbl <- hits()$true_abbr
-          colnames(results_tbl) <- "Results"
+        if(is.data.frame(hits()$true_abbr) & nrow(hits()$true_abbr) > 0){
+          results_tbl <- tibble::tibble(Results = hits()$true_abbr)
+          #colnames(results_tbl) <- "Results"
           selected <- seq_along(results_tbl$Results)
-        } else {
+          
+        } else if(hits()$true_abbr ==  "Nothing found"){
+          
           results_tbl <- tibble::tibble(Results = "Nothing found")
           selected <- NULL
+          
         }
       } else {
         results_tbl <- tibble::tibble(Results = "Nothing to show")

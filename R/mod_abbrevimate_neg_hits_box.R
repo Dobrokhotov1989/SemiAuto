@@ -81,16 +81,18 @@ mod_abbrevimate_neg_hits_box_server <- function(id, hits){
     output$neg_hits <- DT::renderDataTable({
       
       if(not_null(hits()$false_abbr)){
-        #nrow() part necessary because sometimes empty tibble appears in hits()
-        if(hits()$false_abbr != "Nothing found" & nrow(hits()$false_abbr) > 0){
+        if(is.data.frame(hits()$false_abbr) & nrow(hits()$false_abbr) > 0){
+          
           results_tbl <- tibble::tibble(Results = hits()$false_abbr)
-        } else {
+          
+        } else if(hits()$false_abbr == "Nothing found"){
           results_tbl <- tibble::tibble(Results = "Nothing found")
-          selected <- NULL
-        }
+          
+        } 
       } else {
         results_tbl <- tibble::tibble(Results = "Nothing to show")
       }
+      
       
       DT::datatable(
         data = results_tbl,
@@ -119,7 +121,7 @@ mod_abbrevimate_neg_hits_box_server <- function(id, hits){
     
     #Add to library
     observeEvent(input$add_to_lib, {
-
+      
       if(not_null(hits()$false_abbr)){
         rv$neg_to_dictionaty <- hits()$false_abbr[input$neg_hits_rows_selected,]
         return(rv$neg_to_dictionaty)
