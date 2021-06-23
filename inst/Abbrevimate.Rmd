@@ -8,6 +8,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 suppressMessages(library(tidyverse))
+suppressMessages(library(xml2))
 ```
 
 # Development of abbrevimate server-side logic
@@ -163,7 +164,8 @@ Here I use function tolower() to make a search case insensitive.
 Next, I replace spaces with ".?" to encounter possibility that space was omitted
 (eg. "Caliculin A" sometimes can be written as "CaliculinA").
 This follows the phrase in parenthesis which can be any length and be anything.
-Lastly, to include or exclude derivatives, I define either strict boundaries around the search term, or the flexible one
+Lastly, to include or exclude derivatives, I define either strict boundaries
+around the search term, or the flexible one
 
 ```{r abbr_pattern}
 abbr_term_to_pattern <- function(term,
@@ -177,7 +179,7 @@ abbr_term_to_pattern <- function(term,
   
   if(derivatives == TRUE){
     
-    search_pattern <- sprintf("(\\S*%s\\w*[ ][(].*?[)])", usable_term)
+    search_pattern <- sprintf("(\\S*%s\\S*[ ][(].*?[)])", usable_term)
     return(search_pattern)
     
   } else if (derivatives == FALSE) {

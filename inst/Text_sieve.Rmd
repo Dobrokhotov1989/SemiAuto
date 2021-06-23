@@ -1,0 +1,210 @@
+---
+title: "Text_sieve"
+author: "Oleg Dobrokhotov"
+date: "2021/6/23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressMessages(library(tidyverse))
+suppressMessages(library(xml2))
+```
+
+# Development of text sieve server-side logic
+
+## Source: EuropePMC
+
+Similarly to abbrevimate we need to get a list of publications and filter them.
+This could be done using previously developed function abbr_epmc_search() and 
+simple dplyr::filter()
+
+```{r empc_query}
+source("../R/fct_abbr_epmc_search.R")
+records_list <- abbr_epmc_search(query = "blebbistatin",
+                                 limit = 10) %>%
+  dplyr::filter(isOpenAccess == "Y")
+
+paper <- europepmc::epmc_ftxt(ext_id = records_list$pmcid[[1]])
+```
+
+As we need to extract sentences with co-appearance of two terms, we can try to
+split paper into sentences and then check each sentence, or we can try to make a
+regex that will extract only sentences with the co-appearance directly from the
+xml/list.
+
+#### Option 1 & 2
+
+Split into sentences and search co-appearance of both words using regex or
+each individual word and finding the co-appearence as "double-true"
+```{r option_1_and_2}
+# xml_find_all looks for all "p" - paragraphs - or "title" inside the paper whether they
+# are located (i.e. at any depth of nodeset). Titles added as co-appearence of 
+# terms might be in titles as well.
+trimed <- c(trimws(xml_find_all(paper, xpath = "//title")), trimws(xml_find_all(paper, xpath = "//p")))
+
+tokens <- tidytext::unnest_tokens(
+  tbl = tibble::tibble(paragraphs = trimed),
+  output = sentences,
+  input = paragraphs,
+  token = "sentences",
+  drop = FALSE)
+
+if(FALSE){
+  tokens$word_1 <- stringr::str_detect(tokens$sentences, pattern = "blebbistatin")
+  tokens$word_2 <- stringr::str_detect(tokens$sentences, pattern = "myosin")
+  tokens$both <- stringr::str_detect(tokens$sentences,
+                                     pattern = "(?=.*\\b(blebbistatin)\\b)(?=.*\\bmyosin\\b).*")
+  
+  tokens %>%
+    dplyr::filter(both == TRUE) %>% 
+    nrow()
+  
+  tokens %>%
+    dplyr::filter(word_1 == TRUE & word_2 == TRUE) %>%
+    nrow()
+}
+microbenchmark::microbenchmark(
+  regex = {
+    tokens$both <- stringr::str_detect(tokens$sentences,
+                                       pattern = "(?=.*\\b(blebbistatin)\\b)(?=.*\\bmyosin\\b).*")
+    tokens_filtered <- tokens %>% dplyr::filter(both == TRUE)
+  },
+  
+  two_words = {
+    tokens$word_1 <- stringr::str_detect(tokens$sentences, pattern = "blebbistatin")
+    tokens$word_2 <- stringr::str_detect(tokens$sentences, pattern = "myosin")
+    
+    tokens_filtered <- tokens %>% dplyr::filter(word_1 == TRUE & word_2 == TRUE) 
+  },
+  times = 10
+  
+)
+```
+
+Microbenchmark suggests that searching two words individually is much faster.
+Next compare same comparison but with the assumption, that each of the words might
+be not a single word but set of synonyms.
+
+```{r option_1_and_2_cont}
+microbenchmark::microbenchmark(
+  regex = {
+    tokens$both <- stringr::str_detect(
+      tokens$sentences,
+      pattern = "(?=.*\\b(blebbistatin|bbi|blebb|bleb|blebbi)\\b)(?=.*\\bmyosin|myosinii|myosiniia\\b).*"
+    )
+    tokens_filtered <- tokens %>% dplyr::filter(both == TRUE)
+  },
+  
+  two_words = {
+    tokens$word_1 <- stringr::str_detect(
+      tokens$sentences, pattern = "blebbistatin|bbi|blebb|bleb|blebbi"
+    )
+    tokens$word_2 <- stringr::str_detect(
+      tokens$sentences, pattern = "myosin|myosinii|myosiniia"
+    )
+    tokens_filtered <- tokens %>% dplyr::filter(word_1 == TRUE & word_2 == TRUE) 
+  },
+  times = 10,
+  check = "identical"
+)
+```
+
+Again, searching for each word individually is much faster then usage of regex with
+lookahead.
+
+#### Option 3
+Next, we can try to directly extract sentences from the xml
+
+```{r option_3}
+stringr::str_detect(paper,
+                    pattern = "blebbistatin")
+
+attempt::attempt({
+  map(paper,
+      ~ stringr::str_detect(.x, pattern = "blebbistatin"))
+})
+```
+Doesn't work.
+
+#### Option 4
+
+It is also might be possible to convert xml to list and run str_detect() 
+over the list
+
+```{r option_4}
+stringr::str_detect(xml2::as_list(paper),
+                    pattern = "blebbistatin")
+
+map(xml2::as_list(paper),
+    ~ stringr::str_detect(.x, pattern = "blebbistatin"))
+
+```
+
+Doesn't work either.
+
+Hence *option with 2 words* is a fastest one.
+
+```{r search_co_appearance}
+purrr::map_dfr(records_list$pmcid,
+               function(x){
+                 paper <- europepmc::epmc_ftxt(ext_id = x)
+                 trimed <- c(trimws(xml_find_all(paper, xpath = "//title")),
+                             trimws(xml_find_all(paper, xpath = "//p")))
+                 
+                 tokens <- tidytext::unnest_tokens(
+                   tbl = tibble::tibble(paragraphs = trimed),
+                   output = sentences,
+                   input = paragraphs,
+                   token = "sentences",
+                   drop = FALSE) %>%
+                   dplyr::mutate(pmcid = x,
+                                 word_1 = stringr::str_detect(sentences, pattern = "blebbistatin"),
+                                 word_2 = stringr::str_detect(sentences, pattern = "myosin")
+                   ) %>%
+                   dplyr::filter(word_1 == TRUE & word_2 == TRUE) %>%
+                   dplyr::select(pmcid, paragraphs, sentences)
+               })
+
+
+
+```
+
+
+
+
+
+### Conversion of dictionaries into patters
+
+"Include derivatives" switch in abbrevimate assumes to include in the search
+words in a form that allows to match term of the word in the middle of the longer
+word. In case of abbreviations, which usually short, it may lead to numerous
+false matches. Hence this switch is removed from the text sieve. To search for 
+derivatives of the full term, it may be used in the dictionary in a form of 
+regex (e.g. "\\\\S\*blebbistatin\\\\S\*").
+
+```{r dictionary_to_pattern}
+if(FALSE){
+  dictionaries <- purrr::map(.x = filenames,
+                             .f = ~ readr::read_csv(file = .x,
+                                                    col_names = input$header))
+}
+dictionaries <- tibble::tibble(
+  col_1 = list(tibble::tibble(
+    abbr = c("blebbistatin", "blebb", "blebbi", "ble"),
+    other = c("some_text", " ", "152", "wtf")),
+    tibble::tibble(
+      bar = c("myosin", "myosiniia", "myosinii"),
+      bla = c("bla", "bla", "bla-bla")
+    )))
+
+# if more then one column - use only first one;
+#change column name to standard one
+patterns <- purrr::map_chr(.x = dictionaries$col_1,
+                           .f = function(x){
+                             x %>% 
+                               dplyr::pull(1) %>% 
+                               stringr::str_c(collapse = "|")
+                           }
+  )
+```

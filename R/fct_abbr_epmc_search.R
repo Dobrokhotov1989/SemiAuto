@@ -42,9 +42,15 @@ abbr_epmc_search <- function(query, limit = NULL, date_range = NULL, precise = F
   # limit == 0 means "unlimited" number of publications
   # "unlimited' == maximum number of hits
   if (limit == 0) {
-    # europepmc::epmc_hits() somethimes returns less records
-    # than europepmc::epmc_search(), hence 1000 added as precautions
-    limit <- europepmc::epmc_hits(query = query_full)+1000
+    # epmc_hits() somethimes returns less records than epmc_search()
+    # for details see https://github.com/ropensci/europepmc/issues/39
+    # limit <- europepmc::epmc_hits(query = query_full)
+    
+    # as a temporary measure
+    my_hits_synonym <- europepmc::epmc_search(query = query_full,
+                                              limit = 1,
+                                              synonym = TRUE)
+    limit <- attr(my_hits_synonym, "hit_count")
   } 
 
   search_results <- europepmc::epmc_search(
@@ -52,7 +58,9 @@ abbr_epmc_search <- function(query, limit = NULL, date_range = NULL, precise = F
       limit = limit, 
       verbose = FALSE #verbose is error-prone
     ) %>%
-      dplyr::select(pmid, pmcid, isOpenAccess, firstPublicationDate, inEPMC, inPMC)
+      dplyr::select(pmid, pmcid, isOpenAccess, 
+                    firstPublicationDate, inEPMC, inPMC,
+                    title, authorString, doi)
     
     return(search_results)
 

@@ -23,7 +23,7 @@ abbr_term_to_pattern <- function(term,
   
   if(derivatives == TRUE){
     
-    search_pattern <- sprintf("(\\S*%s\\w*[ ][(].*?[)])", usable_term)
+    search_pattern <- sprintf("(\\S*%s\\S*[ ][(].*?[)])", usable_term)
     return(search_pattern)
     
   } else if (derivatives == FALSE) {

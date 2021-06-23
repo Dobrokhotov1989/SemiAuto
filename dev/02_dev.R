@@ -50,6 +50,10 @@ golem::add_module( name = "abbrevimate_pos_hits_box" ) # Name of the module
 golem::add_module( name = "abbrevimate_neg_hits_box" ) # Name of the module
 golem::add_module( name = "abbrevimate_dictionary_box" ) # Name of the module
 
+
+golem::add_module( name = "text_sieve_settings_box" ) # Name of the module
+
+
 ## Add helper functions ----
 ## Creates fct_* and utils_*
 golem::add_fct( "abbr_epmc_search" ) 
@@ -57,7 +61,7 @@ golem::add_fct( "abbr_term_to_pattern" )
 golem::add_fct( "abbr_extract_pattern_from_paper" ) 
 golem::add_fct( "abbr_abbreviation_to_pattern" ) 
 golem::add_fct( "abbr_split_term_and_abbr" ) 
-
+golem::add_fct( "abbr_find_coappearance" ) 
 
 golem::add_utils( "helpers" )
 
