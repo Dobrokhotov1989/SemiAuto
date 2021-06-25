@@ -145,35 +145,6 @@ Doesn't work either.
 
 Hence *option with 2 words* is a fastest one.
 
-```{r search_co_appearance}
-purrr::map_dfr(records_list$pmcid,
-               function(x){
-                 paper <- europepmc::epmc_ftxt(ext_id = x)
-                 trimed <- c(trimws(xml_find_all(paper, xpath = "//title")),
-                             trimws(xml_find_all(paper, xpath = "//p")))
-                 
-                 tokens <- tidytext::unnest_tokens(
-                   tbl = tibble::tibble(paragraphs = trimed),
-                   output = sentences,
-                   input = paragraphs,
-                   token = "sentences",
-                   drop = FALSE) %>%
-                   dplyr::mutate(pmcid = x,
-                                 word_1 = stringr::str_detect(sentences, pattern = "blebbistatin"),
-                                 word_2 = stringr::str_detect(sentences, pattern = "myosin")
-                   ) %>%
-                   dplyr::filter(word_1 == TRUE & word_2 == TRUE) %>%
-                   dplyr::select(pmcid, paragraphs, sentences)
-               })
-
-
-
-```
-
-
-
-
-
 ### Conversion of dictionaries into patters
 
 "Include derivatives" switch in abbrevimate assumes to include in the search
@@ -206,5 +177,354 @@ patterns <- purrr::map_chr(.x = dictionaries$col_1,
                                dplyr::pull(1) %>% 
                                stringr::str_c(collapse = "|")
                            }
-  )
+)
 ```
+
+```{r dynamic_pattern_detecttion}
+# This expression allows dynamically evaluate appearance of each pattern in the
+# sentences (https://community.rstudio.com/t/dynamically-add-columns-to-tibble/108233)
+
+(mutator_expressions <- purrr::map(
+  patterns,
+  ~rlang::parse_expr(glue::glue("str_detect(sentences, pattern = '{.x}')"))
+) %>%
+  rlang::set_names(glue::glue("word_{seq_along(patterns)}")))
+
+test_tokens <- tokens %>%
+  dplyr::select(sentences) %>%
+  mutate(!!!mutator_expressions) %>%
+  dplyr::filter(word_1 == TRUE & word_2 == TRUE)
+
+test_tokens_2 <- tokens %>%
+  dplyr::select(sentences) %>%
+  dplyr::mutate(word_1 = stringr::str_detect(sentences, pattern = patterns[[1]]),
+                word_2 = stringr::str_detect(sentences, pattern = patterns[[2]])
+  ) %>%
+  dplyr::filter(word_1 == TRUE & word_2 == TRUE)
+
+identical(test_tokens, test_tokens_2)
+```
+
+```{r xml_to_pattern_detenction}
+dictionaries <- tibble::tibble(
+  dictionaries = list(
+    tibble::tibble(
+      abbr = c("blebbistatin", "blebb", "blebbi", "ble"),
+      other = c("some_text", " ", "152", "wtf")),
+    tibble::tibble(
+      bar = c("myosin", "myosiniia", "myosinii"),
+      bla = c("bla", "bla", "bla-bla"))
+  ))
+
+
+abbr_dictionaries_to_patterns <- function(dictionaries){
+  patterns <- purrr::map_chr(.x = dictionaries$dictionaries,
+                             .f = function(x){
+                               x %>% 
+                                 dplyr::pull(1) %>% 
+                                 stringr::str_c(collapse = "|")
+                               
+                             } 
+  )
+  
+  return(patterns)
+}
+
+patterns <- abbr_dictionaries_to_patterns(dictionaries = dictionaries)
+
+abbr_find_coappearance_epmc <- function(patterns, pmcid){
+  require(magrittr)
+  # This helper expression allows dynamically evaluate appearance of each 
+  # pattern in the sentences
+  # (https://community.rstudio.com/t/dynamically-add-columns-to-tibble/108233)
+  (mutator_expressions <- purrr::map(
+    patterns,
+    ~rlang::parse_expr(
+      glue::glue("str_detect(sentences, pattern = '{.x}')"))
+  ) %>%
+      rlang::set_names(glue::glue("word_{seq_along(patterns)}")
+      )
+  )
+  
+  # Downloads papers from the pmcid vector & searches for the patterns
+  # co-appearance 
+  results <- purrr::map_dfr(pmcid,
+                            function(x){
+                              # Download
+                              paper <- europepmc::epmc_ftxt(ext_id = x)
+                              
+                              # Xml to character vector (titles and paragraphs only)
+                              trimed <- c(trimws(xml_find_all(paper, xpath = "//title")),
+                                          trimws(xml_find_all(paper, xpath = "//p")))
+                              
+                              # Split into sentences
+                              tokens <- tidytext::unnest_tokens(
+                                tbl = tibble::tibble(paragraphs = trimed),
+                                output = sentences,
+                                input = paragraphs,
+                                token = "sentences",
+                                collapse = FALSE,
+                                drop = FALSE) 
+                              
+                              # Evaluate co-appearance of patterns
+                              tokens <- tokens %>% 
+                                mutate(!!!mutator_expressions,
+                                       pmcid = x) %>%
+                                dplyr::filter(
+                                  rlang::eval_tidy(rlang::parse_expr(
+                                    stringr::str_c(
+                                      glue::glue("word_{seq_along(patterns)} == TRUE"),
+                                      collapse = " & ")
+                                  )))%>%
+                                dplyr::select(pmcid, paragraphs, sentences) %>%
+                                unique()
+                            })
+  return(results)
+  
+}
+
+
+coappearance_tbl <- abbr_find_coappearance_epmc(patterns = patterns,
+                                                pmcid = records_list$pmcid)
+
+results <- dplyr::left_join(x = coappearance_tbl,
+                            y = records_list, 
+                            by = "pmcid")
+```
+
+#### Convert dictionaries files list into patterns vector
+```{r files_to_patterns}
+files <- c("dic1.csv", "dic2.csv")
+
+abbr_dictionaries_to_patterns <- function(files, header){
+  require(magrittr)
+  
+  dictionaries <- purrr::map(files,
+                             ~ readr::read_csv(.x, col_names = header))
+  
+  patterns <- purrr::map_chr(.x = dictionaries,
+                             .f = function(x){
+                               
+                               stringr::str_c(dplyr::pull(x, 1),
+                                              collapse = "|")
+                               
+                             } 
+  )
+  
+  return(patterns)
+}
+
+patterns <- abbr_dictionaries_to_patterns(files = files, header = FALSE)
+
+```
+
+### Highlight matched words in a sentences and paragraphs
+
+```{r highlight_words}
+results <- abbr_find_coappearance_epmc(patterns,
+                                       "PMC7869109")
+
+dictionaries <- tibble::tibble(
+  dictionaries = list(
+    tibble::tibble(
+      abbr = c("calyculin a", "cala", "cal a"),
+      other = c("some_text", " ", "wtf")),
+    tibble::tibble(
+      bar = c("myosin", "myosiniia", "myosinii"),
+      bla = c("bla", "bla", "bla-bla"))
+  ))
+
+patterns <- abbr_dictionaries_to_patterns(dictionaries = dictionaries)
+
+#### Works only for single words ####
+sentence <- tibble::tibble(
+  sentences = unlist(stringr::str_split(results$sentences[[1]], pattern = " "))
+) %>%
+  dplyr::mutate(
+    need_highlight = purrr::map_lgl(
+      sentences,
+      ~stringr::str_detect(.x,
+                           pattern = stringr::str_c(patterns, collapse = "|")
+      )
+    ),
+    sentences = dplyr::case_when(
+      need_highlight == TRUE ~ 
+        sprintf("<strong><mark style = 'background-color:%s'>%s</mark></strong>",
+                "#D1D0DE", sentences),
+      need_highlight == FALSE ~ sentences
+    )
+  ) %>%
+  dplyr::pull(sentences) %>%
+  stringr::str_c(collapse = " ")
+
+
+#### Important! This function works only for individual words
+#### If term has 2+ words (eg. "calyculin a") it would not highlight
+add_highlight_depricated <- function(sentence, patterns, color = "#D1D0DE"){
+  
+  new_sentence <- tibble::tibble(
+    # split sentence into words 
+    split_sentence = unlist(stringr::str_split(sentence, pattern = " "))
+  ) %>%
+    # find words matching patterns
+    dplyr::mutate(
+      need_highlight = purrr::map_lgl(
+        split_sentence,
+        ~stringr::str_detect(.x,
+                             pattern = stringr::str_c(patterns, collapse = "|")
+        )
+      ),
+      # add highlight
+      split_sentence = dplyr::case_when(
+        need_highlight == TRUE ~ 
+          sprintf("<strong><mark style = 'background-color:%s'>%s</mark></strong>",
+                  color, split_sentence),
+        need_highlight == FALSE ~ split_sentence
+      )
+    ) %>%
+    # merge sentence back
+    dplyr::pull(split_sentence) %>%
+    stringr::str_c(collapse = " ")
+  return(new_sentence)
+}
+
+
+#### Words for phrases ####
+# Other approach. Similar to what I used in abbr_abbreviation_to_pattern() to
+# add escape characters
+
+sentence <- results$sentences[[1]]
+color = "#D1D0DE"
+
+# Detect positions of words/phrases matching patterns
+positions_init <- tibble::as_tibble((stringr::str_locate_all(sentence,
+                                                             pattern = stringr::str_c(patterns, collapse = "|"))
+)[[1]]) %>%
+  # Adjust the position of tag insertion
+  dplyr::mutate(start = start - 1,
+                end = end)
+# Calculate length of character lengths between insertions
+start_groups <- c(positions_init$start[[1]],
+                  (positions_init$start - dplyr::lag(positions_init$start))[-1])
+
+
+# Make a pattern to match number of characters
+start_groups_pattern <- purrr::map_chr(start_groups,
+                                       ~stringr::str_c("(.{", .x, "})")) %>%
+  stringr::str_c(collapse = "") %>%
+  stringr::str_c("^", ., "(.+)$")
+
+
+# Create a replacement pattern
+start_tag <- sprintf("<mark style = 'background-color:%s'>", color)
+
+start_replacement <- stringr::str_c(
+  "\\", seq_along(positions_init$start), collapse = start_tag
+) %>%
+  stringr::str_c(., nrow(positions_init)+1, sep = stringr::str_c(start_tag, "\\"))
+
+
+# Add tags to the text
+intermediate_sentence <- sentence %>%
+  stringr::str_replace_all(pattern = start_groups_pattern,
+                           replacement = start_replacement) 
+
+# Repeat same for the closing tag
+positions_second <- tibble::as_tibble((stringr::str_locate_all(intermediate_sentence,
+                                                               pattern = stringr::str_c(patterns, collapse = "|"))
+)[[1]]) %>%
+  # Adjust the position of tag insertion
+  dplyr::mutate(start = start - 1,
+                end = end)
+
+end_groups <- c(positions_second$end[[1]],
+                (positions_second$end - dplyr::lag(positions_second$end))[-1])
+
+end_groups_pattern <- purrr::map_chr(end_groups,
+                                     ~stringr::str_c("(.{", .x, "})")) %>%
+  stringr::str_c(collapse = "") %>%
+  stringr::str_c("^", ., "(.+)$")
+
+end_tag <- "</mark>"
+
+end_replacement <- stringr::str_c(
+  "\\", seq_along(positions_second$end), collapse = end_tag
+) %>%
+  stringr::str_c(., nrow(positions_second)+1, sep = stringr::str_c(end_tag, "\\"))
+
+new_sentence <- intermediate_sentence %>%
+  stringr::str_replace_all(pattern = end_groups_pattern,
+                           replacement = end_replacement) 
+
+add_highlight <- function(sentence, patterns, color = "#D1D0DE"){
+  # Detect positions of words/phrases matching patterns
+  positions_init <- tibble::as_tibble((stringr::str_locate_all(sentence,
+                                                               pattern = stringr::str_c(patterns, collapse = "|"))
+  )[[1]]) %>%
+    # Adjust the position of tag insertion
+    dplyr::mutate(start = start - 1,
+                  end = end)
+  # Calculate length of character lengths between insertions
+  start_groups <- c(positions_init$start[[1]],
+                    (positions_init$start - dplyr::lag(positions_init$start))[-1])
+  
+  
+  # Make a pattern to match number of characters
+  start_groups_pattern <- purrr::map_chr(start_groups,
+                                         ~stringr::str_c("(.{", .x, "})")) %>%
+    stringr::str_c(collapse = "") %>%
+    stringr::str_c("^", ., "(.+)$")
+  
+  
+  # Create a replacement pattern
+  start_tag <- sprintf("<mark style = 'background-color:%s'>", color)
+  
+  start_replacement <- stringr::str_c(
+    "\\", seq_along(positions_init$start), collapse = start_tag
+  ) %>%
+    stringr::str_c(., nrow(positions_init)+1, sep = stringr::str_c(start_tag, "\\"))
+  
+  
+  # Add tags to the text
+  intermediate_sentence <- sentence %>%
+    stringr::str_replace_all(pattern = start_groups_pattern,
+                             replacement = start_replacement) 
+  
+  # Repeat same for the closing tag
+  positions_second <- tibble::as_tibble((stringr::str_locate_all(intermediate_sentence,
+                                                                 pattern = stringr::str_c(patterns, collapse = "|"))
+  )[[1]]) %>%
+    # Adjust the position of tag insertion
+    dplyr::mutate(start = start - 1,
+                  end = end)
+  
+  end_groups <- c(positions_second$end[[1]],
+                  (positions_second$end - dplyr::lag(positions_second$end))[-1])
+  
+  end_groups_pattern <- purrr::map_chr(end_groups,
+                                       ~stringr::str_c("(.{", .x, "})")) %>%
+    stringr::str_c(collapse = "") %>%
+    stringr::str_c("^", ., "(.+)$")
+  
+  end_tag <- "</mark>"
+  
+  end_replacement <- stringr::str_c(
+    "\\", seq_along(positions_second$end), collapse = end_tag
+  ) %>%
+    stringr::str_c(., nrow(positions_second)+1, sep = stringr::str_c(end_tag, "\\"))
+  
+  new_sentence <- intermediate_sentence %>%
+    stringr::str_replace_all(pattern = end_groups_pattern,
+                             replacement = end_replacement) 
+  
+  return(new_sentence) 
+}
+
+
+
+add_highlight(results$sentences[[2]],
+              patterns)
+
+```
+
+

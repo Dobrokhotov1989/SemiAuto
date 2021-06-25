@@ -89,7 +89,7 @@ mod_text_sieve_settings_box_server <- function(id){
       } else {
         field <- shiny::textInput(
           inputId = ns("search_term"), 
-          label = "Enter term here",
+          label = "Enter query here",
           placeholder = "...",
           value = NULL,
           width = "100%"
@@ -150,6 +150,44 @@ mod_text_sieve_settings_box_server <- function(id){
           minView = "years",
           dateFormat = "yyyy")
         return(field)
+      }
+    })
+    
+    observeEvent(input$search, {
+      
+      patterns <- abbr_dictionaries_to_patterns(files = input$dic$datapath,
+                                                header = input$header)
+      
+      if(input$source == "EuropePMC"){
+        
+        # Limit set at x5 of max_pubs limit to ensure max_pubs number of open
+        # access publication.
+        pubs_list <- abbr_epmc_search(query = input$search_term,
+                                      limit = input$max_pubs*5,
+                                      date_range = input$dates,
+                                      precise = input$precise)
+        
+        #Split pubs_list on the "searchable" (open) and unsearchable (closed) papers
+        open_pubs_list <- pubs_list %>%
+          dplyr::filter(isOpenAccess == "Y" &
+                          not_na(pmcid)) 
+        if (nrow(open_pubs_list) > input$max_pubs & input$max_pubs != 0){
+          open_pubs_list <- open_pubs_list[1:input$max_pubs, ]
+        }
+        
+        closed_pubs_list <- pubs_list %>%
+          dplyr::filter(isOpenAccess == "N" | is.na(pmcid))
+        
+        coapp_tbl <- abbr_find_coappearance_epmc(patterns = patterns,
+                                                 pmcid = open_pubs_list$pmcid)
+        
+        analysis_results <- dplyr::left_join(x = coapp_tbl,
+                                             y = open_pubs_list,
+                                             by = "pmcid")
+
+        return(
+          rv$analysis_results <- analysis_results
+        )
       }
     })
     

@@ -11,7 +11,8 @@ mod_text_sieve_tab_ui <- function(id){
   ns <- NS(id)
   text_sieve = shinydashboard::tabItem(
     tabName = "text_sieve",
-    mod_text_sieve_settings_box_ui(ns("text_sieve_settings_box_ui_1"))
+    mod_text_sieve_settings_box_ui(ns("text_sieve_settings_box_ui_1")),
+    mod_text_sieve_results_box_ui(ns("text_sieve_results_box_ui_1"))
   )
   return(text_sieve)
 }
@@ -24,7 +25,8 @@ mod_text_sieve_tab_server <- function(id){
     ns <- session$ns
     
     text_sieve_return_values <- mod_text_sieve_settings_box_server("text_sieve_settings_box_ui_1")
-    
+    mod_text_sieve_results_box_server("text_sieve_results_box_ui_1",
+                                      tbl = text_sieve_return_values)
   })
 }
     

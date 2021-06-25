@@ -3,8 +3,8 @@
 #' @description Function shapes query for EuropePMC and make a search.
 #' For additional explanations see Abbrevimate.Rmd
 #'
-#' @return Returns tibble with four columns: pmid, pmcid, isOpenAccess,
-#'  and firstPublicationDate
+#' @return Returns tibble with columns: pmid, pmcid, isOpenAccess, inEPMC,
+#'  inPMC, title, authorString, doi, and firstPublicationDate
 #'
 #' @noRd
 #' 
@@ -16,6 +16,8 @@
 #' ## End(Not run)
 
 abbr_epmc_search <- function(query, limit = NULL, date_range = NULL, precise = FALSE){
+  
+  require(magrittr)
   
   #Define full query
   #If date range is not defined by user

@@ -29,6 +29,7 @@ usethis::use_package( "stringr" )
 usethis::use_package( "xml2" )
 usethis::use_package( "purrr" )
 usethis::use_package( "rlang" )
+usethis::use_package( "glue" )
 
 ## Add modules ----
 ## Create a module infrastructure in R/
@@ -52,7 +53,7 @@ golem::add_module( name = "abbrevimate_dictionary_box" ) # Name of the module
 
 
 golem::add_module( name = "text_sieve_settings_box" ) # Name of the module
-
+golem::add_module( name = "text_sieve_results_box" ) # Name of the module
 
 ## Add helper functions ----
 ## Creates fct_* and utils_*
@@ -61,7 +62,9 @@ golem::add_fct( "abbr_term_to_pattern" )
 golem::add_fct( "abbr_extract_pattern_from_paper" ) 
 golem::add_fct( "abbr_abbreviation_to_pattern" ) 
 golem::add_fct( "abbr_split_term_and_abbr" ) 
-golem::add_fct( "abbr_find_coappearance" ) 
+
+golem::add_fct( "abbr_find_coappearance_epmc" ) 
+golem::add_fct( "abbr_dictionaries_to_patterns" ) 
 
 golem::add_utils( "helpers" )
 
