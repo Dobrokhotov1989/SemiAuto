@@ -15,12 +15,26 @@
 abbr_term_to_pattern <- function(term,
                                  derivatives = FALSE){
   
+  # If special characters appears in the search query
+  # they may lead to error due to the incorrect regex.
+  # Hence, all special characters are replaced with \\[\\^\\\\w\\\\s\\]
+  # which means "any character that is not alphanumeric and not white-space"
+  special_characters <- c(".", "+", "*", "?", "^", "$", "(", ")",
+                          "[", "]", "{", "}", "|", "\\")
+  
+  special_characters_pattern <- 
+    stringr::str_c( "\\", special_characters, collapse = "|") %>%
+    stringr::str_c("(", ., ")")
+  
   usable_term <- term %>%
     tolower() %>%
     stringr::str_replace_all(string = .,
                              pattern = " ",
-                             replacement = ".?")
-  
+                             replacement = ".?") %>%
+    stringr::str_replace_all(string = .,
+                             pattern = special_characters_pattern,
+                             replacement = "\\[\\^\\\\w\\\\s\\]")
+
   if(derivatives == TRUE){
     
     search_pattern <- sprintf("(\\S*%s\\S*[ ][(].*?[)])", usable_term)

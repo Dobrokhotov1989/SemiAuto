@@ -1,0 +1,35 @@
+---
+title: "Reading_pdfs"
+author: "Oleg Dobrokhotov"
+date: "2021/6/28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressMessages(library(tidyverse))
+```
+
+
+To analyze local documents it is necessary to read pdf files
+
+```{r pdftools}
+
+test_pdf <- pdftools::pdf_text(pdf = "https://www.molbiolcell.org/doi/pdf/10.1091/mbc.E20-09-0582")
+
+by_row_pdf <- stringr::str_split(test_pdf, pattern = "\n")
+
+by_row_pdf[[1]][19:22]
+
+head(by_row_pdf[[2]])
+
+data_pdf <- pdftools::pdf_data(pdf = "https://www.molbiolcell.org/doi/pdf/10.1091/mbc.E20-09-0582")
+
+  test <- tabulizer::extract_text(file = "https://www.molbiolcell.org/doi/pdf/10.1091/mbc.E20-09-0582")
+  
+  test_spl <- stringr::str_split(test, "\n")
+  
+  test_spl[[1]][c(45:48, 74:76)]
+
+
+```

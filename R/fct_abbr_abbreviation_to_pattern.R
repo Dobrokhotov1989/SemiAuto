@@ -74,7 +74,10 @@ abbr_abbreviation_to_pattern <- function(x){
           return(x)
         }
       
-    })
+    }) %>%
+    purrr::map_chr(~stringr::str_replace_all(.x,
+                                             pattern = "-",
+                                             replacement = "-?"))
   
   return(complete_pattern)
 }

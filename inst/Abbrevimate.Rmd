@@ -866,3 +866,54 @@ abbr_abbreviation_to_pattern <- function(x){
   return(complete_pattern)
 }
 ```
+
+
+Some abbreviations are embedded into the more complex phrases, e.g. "blebb+noco"
+shows abbreviation for blebbistatin and nocodazol. Probably, elsewhere in the text,
+each of abbreviations were additionally defined.
+
+Another possibility is when abbreviations follows" +" or "-" sign, e.g. "+blebb" or
+"- blb", or defined with "hereafter", e.g. "hereafter blebbi". Obviously, neither
+"+/-" signs nor "hereafter are part of the term, hence it is necessary to extract abbreviations from such definitions.
+
+To remove "+", "-", and "hereafter" from the beginning of the string, the following
+regex can be used
+
+```{r abbr_cleaning}
+
+stringr::str_replace_all(string = c("hereafter blebbi", 
+                                    "+blebb",
+                                    "- blb",
+                                    "blebb + noco"),
+                         pattern = "^(\\+|-|hereafter)\\s?",
+                         replacement = "")
+
+```
+
+There also was the case when abbreviation was embedded into "", e.g. "blebb" (with
+quote marks).
+
+```{r abbr_cleaning_2}
+stringr::str_replace_all(string = c("hereafter blebbi", 
+                                    '"blebb"',
+                                    "blebb + noco"),
+                         pattern = '^"(.*)"$',
+                         replacement = "\\1")
+
+```
+
+Another problem is that "-" sometimes appears in the meaningful place, but not
+matching hthe position of "-" in the term, e.g. "para-nitroblebbistatin (pn-blebb)".
+Presence of "-" might be possible even in the abbreviation of terms that does not
+have "-".
+Hence, "-" might be replaced with "-?" in abbretivation pattern in order to be 
+more flexible in the position and existance of "-"
+```{r abbr_to_pattern_update}
+test_vector <- c("pn-bleb", "*bleb", "bleb + noco") %>%
+  purrr::map_chr(~ abbr_abbreviation_to_pattern(.x)) %>%
+  purrr::map_chr(~stringr::str_replace_all(string = .x, 
+                                             pattern = "-",
+                                             replacement = "-?"))
+
+test_vector
+```

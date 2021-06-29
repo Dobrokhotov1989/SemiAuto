@@ -155,6 +155,12 @@ mod_text_sieve_settings_box_server <- function(id){
     
     observeEvent(input$search, {
       
+      shinyWidgets::progressSweetAlert(
+        session = session, id = "myprogress",
+        title = "Loading list of papers",
+        display_pct = TRUE, value = 0
+      )
+      
       patterns <- abbr_dictionaries_to_patterns(files = input$dic$datapath,
                                                 header = input$header)
       
@@ -178,18 +184,31 @@ mod_text_sieve_settings_box_server <- function(id){
         closed_pubs_list <- pubs_list %>%
           dplyr::filter(isOpenAccess == "N" | is.na(pmcid))
         
+        shinyWidgets::updateProgressBar(
+          session = session,
+          id = "myprogress",
+          title = sprintf("Work in progress (total %s papers to analyze)",
+                          nrow(open_pubs_list)),
+          value = 0,
+          total = nrow(open_pubs_list)
+        )
+        
         coapp_tbl <- abbr_find_coappearance_epmc(patterns = patterns,
-                                                 pmcid = open_pubs_list$pmcid)
+                                                 pmcid = open_pubs_list$pmcid,
+                                                 session = session)
         
         analysis_results <- dplyr::left_join(x = coapp_tbl,
                                              y = open_pubs_list,
                                              by = "pmcid")
-
+        
+        shinyWidgets::closeSweetAlert(session = session)
+        
         return(
           rv$analysis_results <- analysis_results
         )
       }
     })
+    
     
     return(reactive(rv$analysis_results))
   })

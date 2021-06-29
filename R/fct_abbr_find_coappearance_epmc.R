@@ -9,7 +9,8 @@
 #' @noRd
 abbr_find_coappearance_epmc <- function(patterns,
                                         pmcid,
-                                        highlight = "#D1D0DE"){
+                                        highlight = "#D1D0DE",
+                                        session){
   
   require(magrittr)
 
@@ -36,8 +37,18 @@ abbr_find_coappearance_epmc <- function(patterns,
   
   # Downloads papers from the pmcid vector & searches for the patterns
   # co-appearance 
-  purrr::map_dfr(pmcid,
-                 function(x){
+  purrr::map2_dfr(pmcid,
+                  seq_along(pmcid),
+                 function(x, y){
+                   
+                   #Update progress bar
+                   shinyWidgets::updateProgressBar(
+                     session = session,
+                     id = "myprogress",
+                     value = y,
+                     total = length(pmcid)
+                   )
+                   
                    # Download
                    paper <- attempt::attempt({
                      europepmc::epmc_ftxt(ext_id = x)
@@ -72,7 +83,7 @@ abbr_find_coappearance_epmc <- function(patterns,
                          )))%>%
                        dplyr::select(pmcid, paragraphs, sentences) %>%
                        unique()
-                     browser()
+                   
                      # Highlight found words
                      tokens <- tokens %>%
                        dplyr::mutate(

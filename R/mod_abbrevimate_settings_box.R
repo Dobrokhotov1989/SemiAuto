@@ -294,8 +294,18 @@ mod_abbrevimate_settings_box_server <- function(id){
             abbrs_vec <- remove_tags(abbrs_vec)
             abbrs_tbl <- abbr_split_term_and_abbr(abbrs_vec)
             
-            abbrs_tbl$abbr_pattern <- purrr::map_chr(abbrs_tbl$abbr, abbr_abbreviation_to_pattern)
+            ## Clean abbreviations
             
+            abbrs_tbl$abbr <- purrr::map_chr(~ stringr::str_replace_all(string = .x,
+                                                                        pattern = "^(\\+|-|hereafter)\\s?",
+                                                                        replacement = ""))
+            
+            abbrs_tbl$abbr <- purrr::map_chr(~ stringr::str_replace_all(string = .x,
+                                                                        pattern = '^"(.*)"$',
+                                                                        replacement = "\\1"))
+            
+            abbrs_tbl$abbr_pattern <- purrr::map_chr(abbrs_tbl$abbr, abbr_abbreviation_to_pattern)
+            browser()
             abbrs_tbl$is_abbr <- purrr::map2_lgl(
               .x = abbrs_tbl$full,
               .y = abbrs_tbl$abbr_pattern,
