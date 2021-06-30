@@ -287,8 +287,8 @@ mod_abbrevimate_settings_box_server <- function(id){
           abbrs_vec <- unlist(abbrs_vec)
           
           if(length(abbrs_vec) == 0){
-            abbrs_true <- "Nothing found"
-            abbrs_false <- "Nothing found"
+            abbrs_true <- c("Nothing found")
+            abbrs_false <- c("Nothing found")
           } else {
             
             abbrs_vec <- remove_tags(abbrs_vec)
@@ -296,16 +296,18 @@ mod_abbrevimate_settings_box_server <- function(id){
             
             ## Clean abbreviations
             
-            abbrs_tbl$abbr <- purrr::map_chr(~ stringr::str_replace_all(string = .x,
+            abbrs_tbl$abbr <- purrr::map_chr(abbrs_tbl$abbr,
+                                             ~ stringr::str_replace_all(string = .x,
                                                                         pattern = "^(\\+|-|hereafter)\\s?",
                                                                         replacement = ""))
             
-            abbrs_tbl$abbr <- purrr::map_chr(~ stringr::str_replace_all(string = .x,
+            abbrs_tbl$abbr <- purrr::map_chr(abbrs_tbl$abbr,
+                                             ~ stringr::str_replace_all(string = .x,
                                                                         pattern = '^"(.*)"$',
                                                                         replacement = "\\1"))
             
             abbrs_tbl$abbr_pattern <- purrr::map_chr(abbrs_tbl$abbr, abbr_abbreviation_to_pattern)
-            browser()
+            
             abbrs_tbl$is_abbr <- purrr::map2_lgl(
               .x = abbrs_tbl$full,
               .y = abbrs_tbl$abbr_pattern,

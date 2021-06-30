@@ -79,30 +79,43 @@ mod_abbrevimate_neg_hits_box_server <- function(id, hits){
     })
     
     output$neg_hits <- DT::renderDataTable({
-      
+
       if(not_null(hits()$false_abbr)){
-        if(is.data.frame(hits()$false_abbr) & nrow(hits()$false_abbr) > 0){
+        if(is.vector(hits()$false_abbr)){
+          results_tbl <- tibble::tibble(Results = "Nothing found")
+
+          selection <- list(
+            mode = "none"
+          )
+          
+        } else if(is.data.frame(hits()$false_abbr) & nrow(hits()$false_abbr) > 0){
           
           results_tbl <- tibble::tibble(Results = hits()$false_abbr)
+          selection <- list(
+            mode = "multiple",
+            selected = NULL,
+            target = "row",
+            selectable = TRUE
+          )
           
-        } else if(hits()$false_abbr == "Nothing found"){
+        } else {
           results_tbl <- tibble::tibble(Results = "Nothing found")
-          
+          selection <- list(
+            mode = "none"
+          )
         } 
       } else {
         results_tbl <- tibble::tibble(Results = "Nothing to show")
+        selection <- list(
+          mode = "none"
+        )
       }
       
       
       DT::datatable(
         data = results_tbl,
         rownames = FALSE,
-        selection = list(
-          mode = "multiple",
-          selected = NULL,
-          target = "row",
-          selectable = TRUE
-        )
+        selection = selection
       )
     })
     

@@ -83,31 +83,48 @@ mod_abbrevimate_pos_hits_box_server <- function(id, hits){
     output$pos_hits <- DT::renderDataTable({
       
       if(not_null(hits()$true_abbr)){
-        if(is.data.frame(hits()$true_abbr) & nrow(hits()$true_abbr) > 0){
-          results_tbl <- tibble::tibble(Results = hits()$true_abbr)
-          #colnames(results_tbl) <- "Results"
-          selected <- seq_along(results_tbl$Results)
-          
-        } else if(hits()$true_abbr ==  "Nothing found"){
+        
+        if(is.vector(hits()$true_abbr)){
           
           results_tbl <- tibble::tibble(Results = "Nothing found")
-          selected <- NULL
+          
+          selection <- list(
+            mode = "none"
+          )
+          
+        } else if(is.data.frame(hits()$true_abbr) & nrow(hits()$true_abbr) > 0){
+          
+          results_tbl <- tibble::tibble(Results = hits()$true_abbr)
+          selected <- seq_along(results_tbl$abbr)
+          selection <- list(
+            mode = "multiple",
+            selected = selected,
+            target = "row",
+            selectable = TRUE
+          )
+          
+        } else {
+         
+          results_tbl <- tibble::tibble(Results = "Nothing found")
+          
+          selection <- list(
+            mode = "none"
+          )
           
         }
       } else {
         results_tbl <- tibble::tibble(Results = "Nothing to show")
-        selected <- NULL
+        
+        selection <- list(
+          mode = "none"
+        )
+        
       }
       
       DT::datatable(
         data = results_tbl,
         rownames = FALSE,
-        selection = list(
-          mode = "multiple",
-          selected = selected,
-          target = "row",
-          selectable = TRUE
-        )
+        selection = selection
       )
       
     })
