@@ -57,9 +57,18 @@ abbr_find_coappearance_epmc <- function(patterns,
                    if(attempt::is_try_error(paper)){
                      return(NULL)
                    } else {
+                     print(x)
                      # Xml to character vector (titles and paragraphs only)
                      trimed <- c(trimws(xml2::xml_find_all(paper, xpath = "//title")),
                                  trimws(xml2::xml_find_all(paper, xpath = "//p")))
+                     
+                     ## If structure of paper is different (and does not contain 
+                     ## titles and paragraphs) convert xml to a single character
+                     ## object
+                     
+                     if(length(trimed) == 0){
+                       trimed <- stringr::str_c(unlist(xml2::as_list(paper)), collapse = ". ")
+                     }
                      
                      # Split into sentences
                      tokens <- tidytext::unnest_tokens(
