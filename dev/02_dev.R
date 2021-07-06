@@ -30,6 +30,8 @@ usethis::use_package( "xml2" )
 usethis::use_package( "purrr" )
 usethis::use_package( "rlang" )
 usethis::use_package( "glue" )
+usethis::use_package( "zip" )
+
 
 ## Add modules ----
 ## Create a module infrastructure in R/
@@ -49,6 +51,7 @@ golem::add_module( name = "home_reading_time_box" ) # Name of the module
 golem::add_module( name = "abbrevimate_settings_box" ) # Name of the module
 golem::add_module( name = "abbrevimate_pos_hits_box" ) # Name of the module
 golem::add_module( name = "abbrevimate_neg_hits_box" ) # Name of the module
+golem::add_module( name = "abbrevimate_hits_box" ) # Name of the module
 golem::add_module( name = "abbrevimate_dictionary_box" ) # Name of the module
 
 

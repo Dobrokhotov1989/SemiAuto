@@ -26,8 +26,8 @@ abbr_split_term_and_abbr <- function(x){
   # If "extra text" present inside parenthesis then everything after comma, 
   # semicolon or period will be removed
   abbr_tbl$abbr <- purrr::map_chr(abbr_tbl$abbr, .f = function(x){
-    if(stringr::str_detect(x, pattern = ",|[.]|;")){
-      return(stringr::str_replace(x, pattern = "(,|[.]|;).*", replacement = ""))
+    if(stringr::str_detect(x, pattern = ",|[.]|;|:")){
+      return(stringr::str_replace(x, pattern = "(,|[.]|;|:).*", replacement = ""))
     } else {
       return(x)
     }

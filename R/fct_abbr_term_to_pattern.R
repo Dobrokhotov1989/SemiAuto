@@ -26,14 +26,21 @@ abbr_term_to_pattern <- function(term,
     stringr::str_c( "\\", special_characters, collapse = "|") %>%
     stringr::str_c("(", ., ")")
   
+  ## The order of replacement below is critical. If change to opposite
+  ## ".?" will be unintentionally replaced
   usable_term <- term %>%
     tolower() %>%
-    stringr::str_replace_all(string = .,
-                             pattern = " ",
-                             replacement = ".?") %>%
+    ## Replacement of special characters for "non-aphanumeric character"
     stringr::str_replace_all(string = .,
                              pattern = special_characters_pattern,
-                             replacement = "\\[\\^\\\\w\\\\s\\]")
+                             replacement = "\\[\\^\\\\w\\\\s\\]") %>%
+    ## Replacement of " " with ".?" to encounter for the cases
+    ## when same term written with or without " ".
+    ## E.g. "Calyculin A" vs "CalyculinA"
+    stringr::str_replace_all(string = .,
+                             pattern = " ",
+                             replacement = ".?")
+
 
   if(derivatives == TRUE){
     

@@ -18,16 +18,14 @@ mod_abbrevimate_settings_box_ui <- function(id){
     icon = shiny::icon("search-plus"),
     column(
       width = 4,
-      shinyWidgets::materialSwitch(
-        inputId = ns("batch"),
-        label = "Batch mode",
-        value = FALSE, 
-        status = "info"
+      
+      shiny::textInput(
+        inputId = ns("search_term"), 
+        label = "Enter term here",
+        placeholder = "...",
+        value = NULL,
+        width = "100%"
       ),
-      br(),
-      
-      htmlOutput(outputId = ns("search_input")),
-      
       br(),
       shinyWidgets::radioGroupButtons(
         inputId = ns("source"),
@@ -43,16 +41,18 @@ mod_abbrevimate_settings_box_ui <- function(id){
     
     column(
       width = 4,
-      htmlOutput(outputId = ns("advanced_set")),
-      textOutput(outputId = ns("text"))
-      
+      htmlOutput(outputId = ns("advanced_set"))
     ),
     
     column(
       width = 4,
       shiny::actionButton(inputId = ns("search"),
                           label = "Search",
-                          icon = shiny::icon("search"))
+                          icon = shiny::icon("search")),
+      br(),
+      br(),
+      htmlOutput(outputId = ns("down_bttn"))
+      
       
     )
     
@@ -70,41 +70,6 @@ mod_abbrevimate_settings_box_server <- function(id){
     rv <- reactiveValues()
     
     #### Render UI based on the conditions ####
-    output$search_input <- renderUI({
-      
-      if(isTRUE(input$batch)){
-        field <- tagList(
-          column(width = 8,
-                 style= "padding:0px;",
-                 shiny::fileInput(
-                   inputId = ns("search_batch"),
-                   label = "Select csv file",
-                   accept = ".csv"
-                 )
-          ),
-          column(width = 4,
-                 style= "padding:0px; margin-top:32px; padding-left:5px",
-                 shinyWidgets::prettySwitch(
-                   inputId = ns("header"),
-                   label = "Header",
-                   fill = TRUE,
-                   status = "info"
-                 )
-          )
-        )
-        return(field)
-      } else {
-        field <- shiny::textInput(
-          inputId = ns("search_term"), 
-          label = "Enter term here",
-          placeholder = "...",
-          value = NULL,
-          width = "100%"
-        )
-        return(field)
-      }
-    })
-    
     output$source_input <- renderUI({
       
       if (input$source == "Local files"){
@@ -184,6 +149,12 @@ mod_abbrevimate_settings_box_server <- function(id){
       }
     })
     
+    output$down_bttn <- renderUI({
+      shiny::downloadButton(outputId = ns("download_extra"),
+                            label = "Download extra data",
+                            icon = shiny::icon("file-archive"))
+    })
+    
     #### Search functionality ####
     observeEvent(input$search, {
       
@@ -213,15 +184,7 @@ mod_abbrevimate_settings_box_server <- function(id){
           display_pct = TRUE, value = 0
         )
         
-        #For batch mode - read uploaded csv file 
-        if(rlang::is_true(input$batch)){
-          terms_list = readr::read_csv(file = input$search_batch,
-                                       col_names = input$header)
-          #tibble to vector; if more then one column - use only first
-          terms_list = dplyr::pull(terms_list, 1)
-        }
-        
-        if(input$source == "EuropePMC" & rlang::is_false(input$batch)){
+        if(input$source == "EuropePMC"){
           
           # Limit set at x5 of max_pubs limit to ensure max_pubs number of open
           # access publication.
@@ -244,8 +207,6 @@ mod_abbrevimate_settings_box_server <- function(id){
           closed_pubs_list <- pubs_list %>%
             dplyr::filter(isOpenAccess == "N" | is.na(pmcid))
           
-          abbrs_vec <- c()
-          
           shinyWidgets::updateProgressBar(
             session = session,
             id = "myprogress",
@@ -255,7 +216,7 @@ mod_abbrevimate_settings_box_server <- function(id){
             total = nrow(open_pubs_list)
           )
           
-          abbrs_vec <- purrr::map2(
+          abbrs_tbl <- purrr::map2_dfr(
             open_pubs_list$pmcid,
             seq_along(open_pubs_list$pmcid),
             function(x, y){
@@ -274,37 +235,42 @@ mod_abbrevimate_settings_box_server <- function(id){
               if(attempt::is_try_error(paper)){
                 return(NULL)
               } else {
-                abbrs_vec <- append(abbrs_vec,
-                                    abbr_extract_pattern_from_paper(x = paper,
-                                                                    pattern = pattern,
-                                                                    derivatives = input$derivatives)
+                
+                abbrs_tbl <- tibble::tibble(
+                  pmcid = x,
+                  extracted = abbr_extract_pattern_from_paper(
+                    x = paper,
+                    pattern = pattern,
+                    derivatives = input$derivatives
+                  )
                 )
-                return(abbrs_vec)
+                
+                return(abbrs_tbl)
               }
               
             })
           
-          abbrs_vec <- unlist(abbrs_vec)
-          
-          if(length(abbrs_vec) == 0){
+       
+          if(nrow(abbrs_tbl) == 0){
             abbrs_true <- c("Nothing found")
             abbrs_false <- c("Nothing found")
           } else {
             
-            abbrs_vec <- remove_tags(abbrs_vec)
-            abbrs_tbl <- abbr_split_term_and_abbr(abbrs_vec)
+            abbrs_tbl <- abbrs_tbl %>% 
+              dplyr::mutate(extracted = remove_tags(extracted)) 
+            
+            abbrs_tbl <- dplyr::bind_cols(abbrs_tbl,
+                                          abbr_split_term_and_abbr(abbrs_tbl$extracted))
             
             ## Clean abbreviations
+            abbrs_tbl$abbr <- purrr::map_chr(abbrs_tbl$abbr,
+                                             ~ stringr::str_trim(.x,
+                                                                 side = "both"))
             
             abbrs_tbl$abbr <- purrr::map_chr(abbrs_tbl$abbr,
                                              ~ stringr::str_replace_all(string = .x,
-                                                                        pattern = "^(\\+|-|hereafter)\\s?",
+                                                                        pattern = "^(\\+|-|hereafter|denoted as)\\s?",
                                                                         replacement = ""))
-            
-            abbrs_tbl$abbr <- purrr::map_chr(abbrs_tbl$abbr,
-                                             ~ stringr::str_replace_all(string = .x,
-                                                                        pattern = '^"(.*)"$',
-                                                                        replacement = "\\1"))
             
             abbrs_tbl$abbr_pattern <- purrr::map_chr(abbrs_tbl$abbr, abbr_abbreviation_to_pattern)
             
@@ -337,12 +303,35 @@ mod_abbrevimate_settings_box_server <- function(id){
           rv$analysis_results <- list(
             true_abbr = abbrs_true,
             false_abbr = abbrs_false,
-            closed_papers = closed_pubs_list
+            closed_papers = closed_pubs_list,
+            full_tbl = abbrs_tbl
           )
           shinyWidgets::closeSweetAlert(session = session)
           return(rv$analysis_results)
         }}
     })
+    
+    output$download_extra <- downloadHandler(
+      filename = function() {
+        paste('extra_data', Sys.Date(), '.zip', sep='')
+      },
+      content = function(file) {
+        
+        ## go to a temp dir to avoid permission issues
+        ## https://stackoverflow.com/questions/43916535/download-multiple-csv-files-with-one-button-downloadhandler-with-r-shiny
+        owd <- setwd(tempdir())
+        on.exit(setwd(owd))
+        
+        readr::write_csv(rv$analysis_results$closed_papers,
+                         file = "restricted_papers.csv")
+        readr::write_csv(rv$analysis_results$full_tbl, file = "all_results.csv")
+        
+        files <- c("restricted_papers.csv", "all_results.csv")
+        
+        ## Doesn't work with base::zip
+        zip::zip(file, files)  
+      }
+    )
     
     return(reactive(rv$analysis_results))
   })

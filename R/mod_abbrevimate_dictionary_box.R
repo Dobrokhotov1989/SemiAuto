@@ -39,7 +39,7 @@ mod_abbrevimate_dictionary_box_ui <- function(id){
 #'
 #' @noRd 
 
-mod_abbrevimate_dictionary_box_server <- function(id, pos, neg){
+mod_abbrevimate_dictionary_box_server <- function(id, pos, neg, extra){
   moduleServer( id, function(input, output, session){
     ns <- session$ns
     rv <- reactiveValues()
@@ -47,7 +47,6 @@ mod_abbrevimate_dictionary_box_server <- function(id, pos, neg){
     output$bttns_lib <- renderUI({
       tagList(
         div(
-          
           shinyBS::tipify(
             shinyWidgets::actionBttn(
               inputId = ns("remove_selected"),
@@ -148,7 +147,6 @@ mod_abbrevimate_dictionary_box_server <- function(id, pos, neg){
         write.csv(rv$dictionary, file, row.names = FALSE)
       }
     )
-    
   })
 }
 

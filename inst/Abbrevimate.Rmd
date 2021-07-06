@@ -917,3 +917,36 @@ test_vector <- c("pn-bleb", "*bleb", "bleb + noco") %>%
 
 test_vector
 ```
+
+
+Extraction of pattern directly from list does not work well, as it does not 
+properly interpret tags and breaks some in the middle leading to not complete 
+pattern or wrong extraction. Therefore list sould be unlisted and collapsed 
+before pattern detection.
+```{r xml_vs_chr}
+paper <- europepmc::epmc_ftxt("PMC8152234")
+
+from_xml <- stringr::str_extract_all(string = paper,
+                                     pattern = stringr::regex(pattern = "(\\S*blebbistatin\\S*[ ][(].*?[)])",
+                                                              ignore_case = TRUE)) %>%
+  purrr::flatten_chr()
+
+from_list <- stringr::str_extract_all(string = xml2::as_list(paper),
+                                     pattern = stringr::regex(pattern = "(\\S*blebbistatin\\S*[ ][(].*?[)])",
+                                                              ignore_case = TRUE)) %>%
+  purrr::flatten_chr()
+## should be 'collapse = " "', not 'collapse = ""', otherwise it will merge
+## some words together.
+from_chr <- stringr::str_extract_all(string = stringr::str_c(unlist(xml2::as_list(paper)), collapse = ""),
+                                     pattern = stringr::regex(pattern = "(\\S*blebbistatin\\S*[ ][(].*?[)])",
+                                                              ignore_case = TRUE)) %>%
+  purrr::flatten_chr()
+
+from_xml
+
+from_list
+
+from_chr
+
+```
+

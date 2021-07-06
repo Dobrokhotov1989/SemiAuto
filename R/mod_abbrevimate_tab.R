@@ -38,7 +38,8 @@ mod_abbrevimate_tab_server <- function(id){
     
     mod_abbrevimate_dictionary_box_server("abbrevimate_dictionary_box_ui_1",
                                           pos = pos_to_dic,
-                                          neg = neg_to_dic)
+                                          neg = neg_to_dic,
+                                          extra = abbr_return_values)
   })
 }
 
